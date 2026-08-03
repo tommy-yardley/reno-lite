@@ -1,8 +1,19 @@
 import React from "react";
-import { dist, centroidOf, wallSpan, doorGeometry, furnitureRectPx } from "../lib/geometry";
-import { lengthToDisplay } from "../lib/units";
-import { VOID_COLOR, WINDOW_COLOR, DOOR_COLOR, SELECTION_COLOR } from "../constants";
-import { CATEGORY_COLORS } from "../lib/furnitureEngine";
+import {
+  dist,
+  centroidOf,
+  wallSpan,
+  doorGeometry,
+  furnitureRectPx,
+} from "../../lib/geometry";
+import { lengthToDisplay } from "../../lib/units";
+import {
+  VOID_COLOR,
+  WINDOW_COLOR,
+  DOOR_COLOR,
+  SELECTION_COLOR,
+} from "../../constants";
+import { CATEGORY_COLORS } from "../../lib/furnitureEngine";
 
 export default function Canvas({ fp }) {
   const {
