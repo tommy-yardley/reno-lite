@@ -1,0 +1,9 @@
+{
+  "appId": "com.renolite.app",
+  "appName": "RenoLite",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

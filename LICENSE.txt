@@ -1,0 +1,6 @@
+Copyright (c) 2026 Tommy Yardley. All rights reserved.
+
+This source code is made available for viewing purposes only.
+No permission is granted to copy, modify, distribute, or use this
+code, in whole or in part, for any purpose without prior written
+consent from the copyright holder.

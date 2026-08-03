@@ -1,0 +1,14 @@
+<svg viewBox="0 0 300 72" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(4,4)">
+    <rect x="2" y="2" width="60" height="60" rx="12" fill="#F3EEE3"/>
+    <path d="M14,14 L50,14 L50,50 L38,50 M26,50 L14,50 L14,14"
+          fill="none" stroke="#1B2B3A" stroke-width="3.5"
+          stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M38,50 A12,12 0 0 0 26,38" fill="none" stroke="#B8863E"
+          stroke-width="1.6" stroke-dasharray="2.5 2.5"/>
+    <line x1="26" y1="50" x2="26" y2="38" stroke="#B8863E" stroke-width="2"
+          stroke-linecap="round"/>
+  </g>
+  <text x="82" y="46" font-family="'Zilla Slab', Georgia, serif" font-weight="700"
+        font-size="34" fill="#1B2B3A">RENO<tspan fill="#B8863E">LITE</tspan></text>
+</svg>
