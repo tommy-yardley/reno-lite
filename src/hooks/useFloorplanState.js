@@ -14,6 +14,8 @@ import {
   polygonsAreaOverlap,
   polygonContainmentFraction,
   deriveWallKeySet,
+  segmentIntersection,
+  insetPolygon,
 } from "../lib/geometry";
 import { parseLengthInput } from "../lib/units";
 import { buildDxf } from "../lib/dxfExport";
@@ -363,18 +365,33 @@ export function useFloorplanState() {
     (clientX, clientY) => {
       const svg = svgRef.current;
       if (!svg || !image) return { x: 0, y: 0 };
+      const matrix = svg.getScreenCTM?.();
+      if (matrix) {
+        const point = svg.createSVGPoint();
+        point.x = clientX;
+        point.y = clientY;
+        const local = point.matrixTransform(matrix.inverse());
+        return { x: local.x, y: local.y };
+      }
       const rect = svg.getBoundingClientRect();
-      const ratio = image.w / rect.width;
-      return { x: (clientX - rect.left) * ratio, y: (clientY - rect.top) * ratio };
+      return {
+        x: ((clientX - rect.left) / Math.max(1, rect.width)) * image.w,
+        y: ((clientY - rect.top) / Math.max(1, rect.height)) * image.h,
+      };
     },
     [image]
   );
 
   const snapTolerance = useCallback(() => {
     const svg = svgRef.current;
-    if (!svg || !image) return 14;
+    if (!svg || !image) return 18;
+    const matrix = svg.getScreenCTM?.();
+    if (matrix) {
+      const screenScale = Math.hypot(matrix.a, matrix.b) || 1;
+      return 18 / screenScale;
+    }
     const rect = svg.getBoundingClientRect();
-    return 12 * (image.w / rect.width);
+    return 18 * (image.w / Math.max(1, rect.width));
   }, [image]);
 
   const findNearbyVertex = useCallback(
@@ -393,6 +410,83 @@ export function useFloorplanState() {
     },
     [vertices, snapTolerance]
   );
+
+  const findNearbyWallPoint = useCallback(
+    (pt) => {
+      const tolerance = snapTolerance();
+      let best = null;
+      wallSegments.forEach((wall) => {
+        const projected = projectOntoSegment(pt, wall.a, wall.b);
+        if (projected.d <= tolerance && (!best || projected.d < best.d)) {
+          best = { wall, point: projected.proj, t: projected.t, d: projected.d };
+        }
+      });
+      return best;
+    },
+    [wallSegments, snapTolerance]
+  );
+
+  const wallKeyFor = (aId, bId) => (aId < bId ? `${aId}-${bId}` : `${bId}-${aId}`);
+
+  const insertVertexIntoLoop = (loop, aId, bId, vertexId) => {
+    if (loop.vertexIds.includes(vertexId)) return loop;
+    const ids = loop.vertexIds;
+    for (let index = 0; index < ids.length; index++) {
+      const nextIndex = (index + 1) % ids.length;
+      const matches =
+        (ids[index] === aId && ids[nextIndex] === bId) ||
+        (ids[index] === bId && ids[nextIndex] === aId);
+      if (!matches) continue;
+      const nextIds = [...ids];
+      nextIds.splice(index + 1, 0, vertexId);
+      return { ...loop, vertexIds: nextIds };
+    }
+    return loop;
+  };
+
+  const splitWallAtPoint = (wall, point, beforeSplit, preferredVertex = null) => {
+    const endpointTolerance = Math.max(0.5, snapTolerance() * 0.2);
+    if (dist(point, wall.a) <= endpointTolerance) return wall.a.id;
+    if (dist(point, wall.b) <= endpointTolerance) return wall.b.id;
+
+    beforeSplit();
+    const vertex = preferredVertex || { id: nextId.current++, x: point.x, y: point.y };
+    if (!preferredVertex) setVertices((items) => [...items, vertex]);
+
+    const firstKey = wallKeyFor(wall.a.id, vertex.id);
+    const secondKey = wallKeyFor(vertex.id, wall.b.id);
+    const splitT = Math.max(0.0001, Math.min(0.9999, projectOntoSegment(vertex, wall.a, wall.b).t));
+    const firstLengthInches = scale ? dist(wall.a, vertex) * scale : null;
+    const secondLengthInches = scale ? dist(vertex, wall.b) * scale : null;
+
+    setRooms((items) => items.map((loop) => insertVertexIntoLoop(loop, wall.a.id, wall.b.id, vertex.id)));
+    setVoids((items) => items.map((loop) => insertVertexIntoLoop(loop, wall.a.id, wall.b.id, vertex.id)));
+    setWallProps((items) => {
+      const next = { ...items };
+      const existing = next[wall.key];
+      delete next[wall.key];
+      if (existing) {
+        next[firstKey] = { ...existing };
+        next[secondKey] = { ...existing };
+      }
+      return next;
+    });
+
+    const remapOpening = (item, minimumWidth) => {
+      if (item.wallKey !== wall.key) return item;
+      if (item.t <= splitT) {
+        const moved = { ...item, wallKey: firstKey, t: item.t / splitT };
+        return firstLengthInches ? reclampOpening(moved, firstLengthInches, minimumWidth) : moved;
+      }
+      const moved = { ...item, wallKey: secondKey, t: (item.t - splitT) / (1 - splitT) };
+      return secondLengthInches ? reclampOpening(moved, secondLengthInches, minimumWidth) : moved;
+    };
+
+    setDoors((items) => items.map((item) => remapOpening(item, 12)));
+    setWindows((items) => items.map((item) => remapOpening(item, 6)));
+    setSelectedWallKey((key) => (key === wall.key ? null : key));
+    return vertex.id;
+  };
 
   /* ---------------- calibration ---------------- */
 
@@ -513,8 +607,24 @@ export function useFloorplanState() {
     }
 
     if (mode === "drawing") {
+      let splitHistoryCaptured = false;
+      const captureSplitHistory = () => {
+        if (splitHistoryCaptured) return;
+        pushHistory();
+        splitHistoryCaptured = true;
+      };
+
       let snappedPt = pt;
-      if (angleSnap && currentChain.length > 0) {
+      let nearby = findNearbyVertex(pt);
+      let wallTarget = nearby ? null : findNearbyWallPoint(pt);
+
+      // Existing geometry wins over angle snapping, so it remains easy to land
+      // on a nearby corner or wall. Otherwise every new segment snaps to 45°.
+      if (nearby) {
+        snappedPt = nearby;
+      } else if (wallTarget) {
+        snappedPt = wallTarget.point;
+      } else if (angleSnap && currentChain.length > 0) {
         const anchor = vertexMap.get(currentChain[currentChain.length - 1]);
         if (anchor) {
           const dx = pt.x - anchor.x;
@@ -524,31 +634,69 @@ export function useFloorplanState() {
             const angle = Math.atan2(dy, dx);
             const snapStep = Math.PI / 4;
             const nearestSnap = Math.round(angle / snapStep) * snapStep;
-            const diff = Math.abs(((angle - nearestSnap + Math.PI) % (2 * Math.PI)) - Math.PI);
-            if (diff < (6 * Math.PI) / 180) {
-              snappedPt = { x: anchor.x + Math.cos(nearestSnap) * d, y: anchor.y + Math.sin(nearestSnap) * d };
-            }
+            snappedPt = { x: anchor.x + Math.cos(nearestSnap) * d, y: anchor.y + Math.sin(nearestSnap) * d };
           }
         }
+        nearby = findNearbyVertex(snappedPt);
+        wallTarget = nearby ? null : findNearbyWallPoint(snappedPt);
+        if (nearby) snappedPt = nearby;
+        else if (wallTarget) snappedPt = wallTarget.point;
       }
-      const nearby = findNearbyVertex(snappedPt);
-      if (nearby && currentChain.length >= 3 && nearby.id === currentChain[0]) {
-        setPendingRoom({ vertexIds: [...currentChain], kind: drawKind });
+
+      let targetId;
+      if (nearby) {
+        targetId = nearby.id;
+      } else if (wallTarget) {
+        targetId = splitWallAtPoint(wallTarget.wall, wallTarget.point, captureSplitHistory);
+      } else {
+        targetId = nextId.current++;
+        const vertex = { id: targetId, x: snappedPt.x, y: snappedPt.y };
+        setVertices((items) => [...items, vertex]);
+        setChainNewVertexIds((ids) => [...ids, targetId]);
+      }
+
+      // Split every existing wall crossed by the new segment and put the same
+      // junction vertices into the new room chain. Rooms then share topology
+      // instead of visually crossing one another with unrelated lines.
+      const intermediate = [];
+      if (currentChain.length > 0) {
+        const anchor = vertexMap.get(currentChain[currentChain.length - 1]);
+        const endPoint = nearby || wallTarget?.point || snappedPt;
+        if (anchor && dist(anchor, endPoint) > 0.5) {
+          wallSegments.forEach((wall) => {
+            const hit = segmentIntersection(anchor, endPoint, wall.a, wall.b);
+            if (!hit || hit.t <= 0.0001 || hit.t >= 0.9999) return;
+
+            const duplicate = intermediate.find((entry) => dist(entry.point, hit.point) <= Math.max(0.5, snapTolerance() * 0.12));
+            const preferred = duplicate ? { id: duplicate.id, x: duplicate.point.x, y: duplicate.point.y } : null;
+            const vertexId = splitWallAtPoint(wall, hit.point, captureSplitHistory, preferred);
+            if (!duplicate) intermediate.push({ id: vertexId, point: hit.point, t: hit.t });
+          });
+          intermediate.sort((a, b) => a.t - b.t);
+        }
+      }
+
+      const additions = [];
+      intermediate.forEach(({ id }) => {
+        if (id !== currentChain[currentChain.length - 1] && additions[additions.length - 1] !== id && id !== targetId) additions.push(id);
+      });
+
+      if (targetId === currentChain[0] && currentChain.length + additions.length >= 3) {
+        setPendingRoom({ vertexIds: [...currentChain, ...additions], kind: drawKind });
         setRoomNameInput(drawKind === "void" ? `Blocked space ${voids.length + 1}` : `Room ${rooms.length + 1}`);
         setRoomTypeInput(ROOM_TYPES[0]);
         setMode("naming");
         return;
       }
-      if (nearby) {
-        if (currentChain[currentChain.length - 1] !== nearby.id) {
-          setCurrentChain((c) => [...c, nearby.id]);
-        }
-      } else {
-        const id = nextId.current++;
-        const v = { id, x: snappedPt.x, y: snappedPt.y };
-        setVertices((vs) => [...vs, v]);
-        setChainNewVertexIds((ids) => [...ids, id]);
-        setCurrentChain((c) => [...c, id]);
+
+      if (currentChain[currentChain.length - 1] !== targetId) {
+        setCurrentChain((chain) => {
+          const next = [...chain];
+          [...additions, targetId].forEach((id) => {
+            if (next[next.length - 1] !== id) next.push(id);
+          });
+          return next;
+        });
       }
     }
   };
@@ -656,6 +804,7 @@ export function useFloorplanState() {
   const deleteDoor = (id) => {
     pushHistory();
     setDoors((ds) => ds.filter((d) => d.id !== id));
+    if (selectedDoorId === id) setSelectedDoorId(null);
   };
   const setDoorWidth = (id, inches) =>
     setDoors((ds) =>
@@ -672,6 +821,7 @@ export function useFloorplanState() {
   const deleteWindow = (id) => {
     pushHistory();
     setWindows((ws) => ws.filter((w) => w.id !== id));
+    if (selectedWindowId === id) setSelectedWindowId(null);
   };
   const setWindowWidth = (id, inches) =>
     setWindows((ws) =>
@@ -925,22 +1075,16 @@ export function useFloorplanState() {
         .reduce((s, va) => s + va.sqInches, 0);
       const sqInches = Math.max(0, grossSqInches - enclosedVoidSqInches);
 
-      let reduction = 0;
-      if (scale) {
-        const n = room.vertexIds.length;
-        for (let i = 0; i < n; i++) {
-          const aId = room.vertexIds[i];
-          const bId = room.vertexIds[(i + 1) % n];
-          const a = vertexMap.get(aId);
-          const b = vertexMap.get(bId);
-          if (!a || !b) continue;
-          const key = aId < bId ? `${aId}-${bId}` : `${bId}-${aId}`;
-          const props = wallProps[key] || { thickness: DEFAULT_WALL_THICKNESS_IN, open: false };
-          if (props.open) continue;
-          reduction += dist(a, b) * scale * (props.thickness / 2);
-        }
-      }
-      const interiorSqInches = Math.max(0, sqInches - reduction);
+      const edgeInsetsPx = room.vertexIds.map((aId, index) => {
+        if (!scale) return 0;
+        const bId = room.vertexIds[(index + 1) % room.vertexIds.length];
+        const key = wallKeyFor(aId, bId);
+        const props = wallProps[key] || { thickness: DEFAULT_WALL_THICKNESS_IN, open: false };
+        return props.open ? 0 : props.thickness / 2 / scale;
+      });
+      const interiorPts = scale ? insetPolygon(pts, edgeInsetsPx) : pts;
+      const interiorGrossSqInches = scale ? shoelaceAreaPx(interiorPts) * scale * scale : 0;
+      const interiorSqInches = Math.max(0, interiorGrossSqInches - enclosedVoidSqInches);
       return { id: room.id, sqInches, grossSqInches, interiorSqInches };
     });
   }, [rooms, vertexMap, scale, voidAreas, wallProps]);
@@ -960,7 +1104,12 @@ export function useFloorplanState() {
   }, [scale, image, unit]);
 
   const previewPoint = useMemo(() => {
-    if (!mousePos || mode !== "drawing" || currentChain.length === 0 || !angleSnap) return mousePos;
+    if (!mousePos || mode !== "drawing" || currentChain.length === 0) return mousePos;
+    const nearby = findNearbyVertex(mousePos);
+    if (nearby) return nearby;
+    const wallTarget = findNearbyWallPoint(mousePos);
+    if (wallTarget) return wallTarget.point;
+    if (!angleSnap) return mousePos;
     const anchor = vertexMap.get(currentChain[currentChain.length - 1]);
     if (!anchor) return mousePos;
     const dx = mousePos.x - anchor.x;
@@ -970,12 +1119,12 @@ export function useFloorplanState() {
     const angle = Math.atan2(dy, dx);
     const snapStep = Math.PI / 4;
     const nearestSnap = Math.round(angle / snapStep) * snapStep;
-    const diff = Math.abs(((angle - nearestSnap + Math.PI) % (2 * Math.PI)) - Math.PI);
-    if (diff < (6 * Math.PI) / 180) {
-      return { x: anchor.x + Math.cos(nearestSnap) * d, y: anchor.y + Math.sin(nearestSnap) * d };
-    }
-    return mousePos;
-  }, [mousePos, mode, currentChain, angleSnap, vertexMap]);
+    const snapped = { x: anchor.x + Math.cos(nearestSnap) * d, y: anchor.y + Math.sin(nearestSnap) * d };
+    const snappedVertex = findNearbyVertex(snapped);
+    if (snappedVertex) return snappedVertex;
+    const snappedWall = findNearbyWallPoint(snapped);
+    return snappedWall ? snappedWall.point : snapped;
+  }, [mousePos, mode, currentChain, angleSnap, vertexMap, findNearbyVertex, findNearbyWallPoint]);
 
   /* ---------------- export ---------------- */
 

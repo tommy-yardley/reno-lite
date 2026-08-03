@@ -21,6 +21,83 @@ export function shoelaceAreaPx(points) {
   return Math.abs(sum) / 2;
 }
 
+export function signedShoelaceAreaPx(points) {
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
+    sum += current.x * next.y - next.x * current.y;
+  }
+  return sum / 2;
+}
+
+function cross2d(a, b) {
+  return a.x * b.y - a.y * b.x;
+}
+
+export function segmentIntersection(a, b, c, d, epsilon = 1e-7) {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const denominator = cross2d(r, s);
+  if (Math.abs(denominator) <= epsilon) return null;
+
+  const delta = { x: c.x - a.x, y: c.y - a.y };
+  const t = cross2d(delta, s) / denominator;
+  const u = cross2d(delta, r) / denominator;
+  if (t < -epsilon || t > 1 + epsilon || u < -epsilon || u > 1 + epsilon) return null;
+
+  return {
+    point: { x: a.x + r.x * t, y: a.y + r.y * t },
+    t: Math.max(0, Math.min(1, t)),
+    u: Math.max(0, Math.min(1, u)),
+  };
+}
+
+function infiniteLineIntersection(a, directionA, b, directionB, epsilon = 1e-7) {
+  const denominator = cross2d(directionA, directionB);
+  if (Math.abs(denominator) <= epsilon) return null;
+  const delta = { x: b.x - a.x, y: b.y - a.y };
+  const t = cross2d(delta, directionB) / denominator;
+  return { x: a.x + directionA.x * t, y: a.y + directionA.y * t };
+}
+
+// Moves each edge inward by its supplied distance, then intersects adjacent
+// offset lines. This measures the usable floor area inside wall centre-lines,
+// including the corner/miter area that a perimeter-only estimate misses.
+export function insetPolygon(points, edgeInsets) {
+  if (points.length < 3) return points;
+  const orientation = signedShoelaceAreaPx(points) >= 0 ? 1 : -1;
+  const lines = points.map((point, index) => {
+    const next = points[(index + 1) % points.length];
+    const direction = { x: next.x - point.x, y: next.y - point.y };
+    const length = Math.hypot(direction.x, direction.y) || 1;
+    const inward = orientation > 0
+      ? { x: -direction.y / length, y: direction.x / length }
+      : { x: direction.y / length, y: -direction.x / length };
+    const distance = Math.max(0, edgeInsets[index] || 0);
+    return {
+      point: { x: point.x + inward.x * distance, y: point.y + inward.y * distance },
+      direction,
+    };
+  });
+
+  const inset = points.map((point, index) => {
+    const previous = lines[(index - 1 + lines.length) % lines.length];
+    const current = lines[index];
+    const intersection = infiniteLineIntersection(previous.point, previous.direction, current.point, current.direction);
+    if (intersection && Number.isFinite(intersection.x) && Number.isFinite(intersection.y)) return intersection;
+    return {
+      x: (previous.point.x + current.point.x) / 2,
+      y: (previous.point.y + current.point.y) / 2,
+    };
+  });
+
+  const originalArea = shoelaceAreaPx(points);
+  const insetArea = shoelaceAreaPx(inset);
+  if (!Number.isFinite(insetArea) || insetArea > originalArea * 1.01) return points;
+  return inset;
+}
+
 export function pointInPolygon(pt, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

@@ -62,7 +62,7 @@ export default function RoomsPanel({ fp }) {
       </div>
       {showInteriorArea && (
         <p className="text-[10px] mt-1" style={{ color: "#8A97A3" }}>
-          Interior area is an approximation — it insets each wall by half its thickness but doesn't miter corners exactly.
+          Interior area follows the inside wall faces, including mitered corners. Overlapping rooms are still counted separately.
         </p>
       )}
     </section>

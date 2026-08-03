@@ -2,10 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html, body, #root {
   height: 100%;
+  min-width: 0;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+svg text {
+  user-select: none;
 }

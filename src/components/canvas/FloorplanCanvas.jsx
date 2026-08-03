@@ -89,15 +89,20 @@ export default function Canvas({ fp }) {
   }
 
   return (
-    <div className="rounded-lg border border-[#D8CCB0] p-2 inline-block" style={{ background: "#FBF8F1" }}>
+    <div
+      className="w-full min-w-0 h-[65vh] min-h-[480px] lg:h-[calc(100vh-150px)] lg:min-h-[620px] rounded-lg border border-[#D8CCB0] p-2 overflow-hidden"
+      style={{ background: "#FBF8F1" }}
+    >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${image.w} ${image.h}`}
         width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
         style={{
-          maxWidth: 900,
           display: "block",
           touchAction: "none",
+          userSelect: "none",
           cursor: ["drawing", "calibrating", "placingWindow", "placingDoor"].includes(mode) ? "crosshair" : "default",
         }}
         onClick={handleSvgClick}

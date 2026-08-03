@@ -35,7 +35,7 @@ export default function Sidebar({ fp }) {
   }, [selectedFurnitureId]);
 
   return (
-    <aside className="border-r border-[#D8CCB0] p-5 space-y-4">
+    <aside className="border-r border-[#D8CCB0] p-4 lg:p-5 space-y-4" style={{ background: "rgba(243,238,227,0.78)" }}>
       <UploadUnitsPanel fp={fp} />
 
       {image && (
