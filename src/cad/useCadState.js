@@ -38,6 +38,7 @@ export function useCadState() {
   const [draggingNodeId, setDraggingNodeId] = useState(null);
   const [draggingObjectId, setDraggingObjectId] = useState(null);
   const [draggingWallId, setDraggingWallId] = useState(null);
+  const [resizingOpening, setResizingOpening] = useState(null);
   const [angleSnap, setAngleSnap] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const nextId = useRef(
@@ -48,6 +49,7 @@ export function useCadState() {
   const undoStack = useRef([]);
   const redoStack = useRef([]);
   const wallDragRef = useRef(null);
+  const openingResizeRef = useRef(null);
 
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const selectedWall = walls.find((wall) => wall.id === selectedWallId) || null;
@@ -116,6 +118,7 @@ export function useCadState() {
         setDraggingNodeId(null);
         setDraggingObjectId(null);
         setDraggingWallId(null);
+        setResizingOpening(null);
         setPlacementKind(null);
         setTool("select");
       }
@@ -414,6 +417,15 @@ export function useCadState() {
         return node;
       }));
     }
+    if (resizingOpening && openingResizeRef.current) {
+      const { openingId, handle, wallLength, fixedT, start, end } = openingResizeRef.current;
+      const projectedT = Math.max(0, Math.min(1, projectToSegment(rawPoint, start, end).t));
+      const minimumT = Math.min(1, 300 / 25.4 / wallLength);
+      const movingT = handle === "start" ? Math.min(projectedT, fixedT - minimumT) : Math.max(projectedT, fixedT + minimumT);
+      const low = Math.max(0, Math.min(fixedT, movingT));
+      const high = Math.min(1, Math.max(fixedT, movingT));
+      setOpenings((items) => items.map((opening) => opening.id === openingId ? { ...opening, t: (low + high) / 2, widthInches: (high - low) * wallLength } : opening));
+    }
   };
 
   const onNodePointerDown = (nodeId) => (event) => {
@@ -472,6 +484,24 @@ export function useCadState() {
     setTool("select");
   };
 
+  const onOpeningResizePointerDown = (openingId, handle) => (event) => {
+    event.stopPropagation();
+    const opening = openings.find((item) => item.id === openingId);
+    const wall = opening && walls.find((item) => item.id === opening.wallId);
+    const start = wall && nodeMap.get(wall.startNodeId);
+    const end = wall && nodeMap.get(wall.endNodeId);
+    if (!opening || !start || !end) return;
+    const wallLength = distance(start, end);
+    const halfT = opening.widthInches / wallLength / 2;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pushHistory();
+    setSelectedOpeningId(openingId);
+    setSelectedWallId(null);
+    setSelectedObjectId(null);
+    openingResizeRef.current = { openingId, handle, wallLength, fixedT: handle === "start" ? opening.t + halfT : opening.t - halfT, start: { ...start }, end: { ...end } };
+    setResizingOpening({ openingId, handle });
+  };
+
   const onObjectPointerDown = (objectId) => (event) => {
     event.stopPropagation();
     const object = objects.find((item) => item.id === objectId);
@@ -489,7 +519,9 @@ export function useCadState() {
     setDraggingNodeId(null);
     setDraggingObjectId(null);
     setDraggingWallId(null);
+    setResizingOpening(null);
     wallDragRef.current = null;
+    openingResizeRef.current = null;
   };
 
   const toggleWallLock = (wallId) => {
@@ -677,6 +709,7 @@ export function useCadState() {
     onNodePointerDown,
     onWallPointerDown,
     onOpeningPointerDown,
+    onOpeningResizePointerDown,
     onObjectPointerDown,
     toggleWallLock,
     setWallLength,

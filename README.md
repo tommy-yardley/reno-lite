@@ -28,7 +28,8 @@ keep the agent plan beside the canvas as a visual reference.
 - Local persistence plus undo/redo.
 - Closing a wall chain creates a named, typed room with live floor area.
 - Doors and windows attach parametrically to host walls with editable widths; door
-  swings can be flipped.
+  swings can be flipped. Selected openings expose direct resize handles and UK metric
+  size presets.
 - Furniture presets can be placed, dragged, resized, and rotated independently of
   room geometry.
 - Live layout checks highlight overlapping furniture, items outside room boundaries,
