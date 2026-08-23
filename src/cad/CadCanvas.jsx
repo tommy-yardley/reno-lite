@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 import { distance, openingSpan, polygonArea } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
+import { OBJECT_CATALOG } from "./catalog";
 
 export default function CadCanvas({ cad }) {
   const {
@@ -11,12 +12,14 @@ export default function CadCanvas({ cad }) {
     walls,
     rooms,
     openings,
+    objects,
     nodeMap,
     unit,
     tool,
     activeNodeId,
     selectedWallId,
     selectedOpeningId,
+    selectedObjectId,
     pointer,
     onCanvasPointerDown,
     onCanvasPointerMove,
@@ -24,6 +27,7 @@ export default function CadCanvas({ cad }) {
     onNodePointerDown,
     onWallPointerDown,
     onOpeningPointerDown,
+    onObjectPointerDown,
     isNodeLocked,
   } = cad;
 
@@ -149,6 +153,43 @@ export default function CadCanvas({ cad }) {
               <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
               <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
               <path d={`M ${span.end.x} ${span.end.y} A ${span.width} ${span.width} 0 0 ${sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
+            </g>
+          );
+        })}
+
+        {objects.map((object) => {
+          const preset = OBJECT_CATALOG[object.kind] || {};
+          const selected = object.id === selectedObjectId;
+          if (object.mount === "wall") {
+            const wall = walls.find((item) => item.id === object.wallId);
+            const start = wall && nodeMap.get(wall.startNodeId);
+            const end = wall && nodeMap.get(wall.endNodeId);
+            if (!start || !end) return null;
+            const center = { x: start.x + (end.x - start.x) * object.t, y: start.y + (end.y - start.y) * object.t };
+            const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
+            const width = object.kind === "radiator" ? object.widthInches : 16;
+            return (
+              <g key={object.id} transform={`translate(${center.x} ${center.y}) rotate(${angle})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "pointer" }}>
+                <rect x={-width / 2} y="-8" width={width} height="16" rx="2" fill="#FBF8F1" stroke={selected ? "#2F78C4" : object.category === "Electrical" ? "#D26A3D" : "#8A6D4B"} strokeWidth={selected ? 2 : 1.5} />
+                <text x="0" y="2.5" textAnchor="middle" fontSize="6" fontWeight="600" fill="#1B2B3A" className="mono">{preset.symbol}</text>
+              </g>
+            );
+          }
+          if (object.mount === "floor") {
+            return (
+              <g key={object.id} transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "move" }}>
+                {selected && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke="#2F78C4" strokeWidth="2" strokeDasharray="4 3" />}
+                <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill="#D7C7A7" fillOpacity="0.82" stroke="#7A6F5C" strokeWidth="1.5" />
+                <text x="0" y="2.5" textAnchor="middle" fontSize="7" fill="#1B2B3A" className="mono" style={{ pointerEvents: "none" }}>{object.name}</text>
+              </g>
+            );
+          }
+          return (
+            <g key={object.id} transform={`translate(${object.x} ${object.y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "move" }}>
+              <circle r={selected ? 11 : 9} fill="#FBF8F1" stroke={selected ? "#2F78C4" : "#D4A72C"} strokeWidth="2" />
+              <line x1="-6" y1="0" x2="6" y2="0" stroke="#D4A72C" strokeWidth="1.5" />
+              <line x1="0" y1="-6" x2="0" y2="6" stroke="#D4A72C" strokeWidth="1.5" />
+              <text x="0" y="3" textAnchor="middle" fontSize="5" fontWeight="700" fill="#1B2B3A" className="mono">{preset.symbol}</text>
             </g>
           );
         })}

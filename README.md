@@ -25,6 +25,10 @@ keep the agent plan beside the canvas as a visual reference.
 - Closing a wall chain creates a named, typed room with live floor area.
 - Doors and windows attach parametrically to host walls with editable widths; door
   swings can be flipped.
+- Furniture presets can be placed, dragged, resized, and rotated independently of
+  room geometry.
+- Sockets, double sockets, switches, radiators, ceiling lights, and pendants use
+  plan symbols; wall-mounted objects retain a parametric position on their host.
 
 ## Legacy implementation retained for migration
 
