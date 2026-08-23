@@ -16,11 +16,17 @@ function boundsFor(project) {
 export function buildCadSvg(project) {
   const nodeMap = new Map(project.nodes.map((node) => [node.id, node]));
   const bounds = boundsFor(project);
+  const areaByRoom = new Map(project.rooms.map((room) => {
+    const gross = polygonArea(room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean));
+    const excluded = project.rooms.filter((candidate) => candidate.classification === "void" && candidate.hostRoomId === room.id).reduce((sum, candidate) => sum + polygonArea(candidate.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)), 0);
+    return [room.id, room.classification === "void" ? gross : Math.max(0, gross - excluded)];
+  }));
   const roomMarkup = project.rooms.map((room) => {
     const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
     if (points.length < 3) return "";
     const center = { x: points.reduce((sum, point) => sum + point.x, 0) / points.length, y: points.reduce((sum, point) => sum + point.y, 0) / points.length };
-    return `<g><polygon points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="${room.color || "#dcebdc"}" fill-opacity="0.28"/><text x="${center.x}" y="${center.y}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#1b2b3a">${xmlEscape(room.name)}</text><text x="${center.x}" y="${center.y + 12}" text-anchor="middle" font-family="monospace" font-size="7" fill="#5b6b78">${(polygonArea(points) / 144).toFixed(1)} sq ft</text></g>`;
+    const area = areaByRoom.get(room.id) || 0;
+    return `<g><polygon points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="${room.classification === "void" ? "#a8a8a2" : room.color || "#dcebdc"}" fill-opacity="${room.classification === "void" ? "0.5" : "0.28"}" ${room.classification === "void" ? 'stroke="#777" stroke-dasharray="5 3"' : ""}/><text x="${center.x}" y="${center.y}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#1b2b3a">${xmlEscape(room.classification === "void" ? `${room.name} · VOID` : room.name)}</text><text x="${center.x}" y="${center.y + 12}" text-anchor="middle" font-family="monospace" font-size="7" fill="#5b6b78">${(area / (39.3700787 ** 2)).toFixed(1)} m²</text></g>`;
   }).join("");
   const wallMarkup = project.walls.map((wall) => {
     const start = nodeMap.get(wall.startNodeId);
@@ -58,6 +64,12 @@ const dxfPair = (code, value) => `${code}\n${value}\n`;
 export function buildCadDxf(project) {
   const nodeMap = new Map(project.nodes.map((node) => [node.id, node]));
   let output = dxfPair(0, "SECTION") + dxfPair(2, "HEADER") + dxfPair(9, "$INSUNITS") + dxfPair(70, 1) + dxfPair(0, "ENDSEC") + dxfPair(0, "SECTION") + dxfPair(2, "ENTITIES");
+  project.rooms.forEach((room) => {
+    const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
+    if (points.length < 3) return;
+    output += dxfPair(0, "LWPOLYLINE") + dxfPair(8, room.classification === "void" ? "VOIDS" : "ROOMS") + dxfPair(90, points.length) + dxfPair(70, 1);
+    points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
+  });
   project.walls.forEach((wall) => {
     const start = nodeMap.get(wall.startNodeId);
     const end = nodeMap.get(wall.endNodeId);
