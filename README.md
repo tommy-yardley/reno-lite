@@ -31,9 +31,13 @@ keep the agent plan beside the canvas as a visual reference.
   swings can be flipped.
 - Furniture presets can be placed, dragged, resized, and rotated independently of
   room geometry.
+- Live layout checks highlight overlapping furniture, items outside room boundaries,
+  and furniture obstructing a door swing.
 - Sockets, double sockets, switches, radiators, ceiling lights, and pendants use
   plan symbols; wall-mounted objects retain a parametric position on their host.
 - Clean SVG, PNG, and PDF drawing exports exclude the untrusted reference plan.
+- True-scale PDFs support common metric and architectural scales, automatically
+  tiling oversized plans across labelled, overlapping paper sheets.
 - DXF exports real-inch wall/opening geometry, dimensions, and renovation-object
   labels on separate CAD layers.
 - Editable RenoLite project files can be saved and reopened on another device.
