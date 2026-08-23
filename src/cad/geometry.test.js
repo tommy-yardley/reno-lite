@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nodeIsConstrained, openingSpan, polygonArea, projectToSegment, snapAngle, wallKey } from "./geometry.js";
+import { nodeIsConstrained, openingSpan, polygonArea, projectToSegment, snapAngle, validateCadGraph, wallKey } from "./geometry.js";
 
 test("snapAngle snaps to 15 degree increments while preserving length", () => {
   const point = snapAngle({ x: 0, y: 0 }, { x: 10, y: 4 });
@@ -33,4 +33,13 @@ test("openingSpan centers an opening along its host wall", () => {
   const span = openingSpan({ x: 0, y: 0 }, { x: 120, y: 0 }, 0.5, 36);
   assert.deepEqual(span.start, { x: 42, y: 0 });
   assert.deepEqual(span.end, { x: 78, y: 0 });
+});
+
+test("validateCadGraph reports broken dependencies", () => {
+  const warnings = validateCadGraph({
+    nodes: [{ id: 1, x: 0, y: 0 }],
+    walls: [{ id: 2, startNodeId: 1, endNodeId: 99 }],
+    openings: [{ id: 3, type: "door", wallId: 7 }],
+  });
+  assert.equal(warnings.length, 2);
 });

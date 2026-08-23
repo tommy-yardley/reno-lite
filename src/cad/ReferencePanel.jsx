@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { ImagePlus, Trash2 } from "lucide-react";
 
 export default function ReferencePanel({ cad }) {
+  const [zoom, setZoom] = useState(100);
   const { referenceImage, fileInputRef, handleReferenceUpload, setReferenceImage } = cad;
   return (
     <aside className="rounded-xl border border-[#D8CCB0] bg-[#F3EEE3] p-3 shadow-sm lg:h-[calc(100vh-170px)]">
@@ -19,9 +20,10 @@ export default function ReferencePanel({ cad }) {
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleReferenceUpload} />
       {referenceImage ? (
         <div className="flex h-[calc(100%-64px)] min-h-[260px] flex-col">
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border border-[#D8CCB0] bg-white p-2">
-            <img src={referenceImage.src} alt="Uploaded floor plan reference" className="max-h-full max-w-full object-contain" />
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[#D8CCB0] bg-white p-2">
+            <img src={referenceImage.src} alt="Uploaded floor plan reference" className="m-auto block h-auto object-contain" style={{ width: `${zoom}%`, maxWidth: "none" }} />
           </div>
+          <label className="mt-2 flex items-center gap-2 text-[10px] text-[#5B6B78]">Reference zoom<input type="range" min="50" max="300" step="10" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="flex-1 accent-[#B8863E]" /><span className="mono w-9 text-right">{zoom}%</span></label>
           <button onClick={() => fileInputRef.current?.click()} className="mt-2 w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">
             Replace reference
           </button>

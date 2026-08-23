@@ -72,3 +72,26 @@ export function openingSpan(start, end, t, widthInches) {
     width: halfWidth * 2,
   };
 }
+
+export function validateCadGraph({ nodes, walls, rooms = [], openings = [], objects = [] }) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const wallIds = new Set(walls.map((wall) => wall.id));
+  const warnings = [];
+  const keys = new Set();
+  walls.forEach((wall) => {
+    if (!nodeIds.has(wall.startNodeId) || !nodeIds.has(wall.endNodeId)) warnings.push(`Wall ${wall.id} has a missing anchor`);
+    const key = wallKey(wall.startNodeId, wall.endNodeId);
+    if (keys.has(key)) warnings.push(`Wall ${wall.id} duplicates an existing wall`);
+    keys.add(key);
+  });
+  rooms.forEach((room) => {
+    if (room.nodeIds.some((id) => !nodeIds.has(id)) || room.wallIds.some((id) => !wallIds.has(id))) warnings.push(`${room.name} has an incomplete boundary`);
+  });
+  openings.forEach((opening) => {
+    if (!wallIds.has(opening.wallId)) warnings.push(`${opening.type} ${opening.id} has no host wall`);
+  });
+  objects.filter((object) => object.mount === "wall").forEach((object) => {
+    if (!wallIds.has(object.wallId)) warnings.push(`${object.name} has no host wall`);
+  });
+  return warnings;
+}
