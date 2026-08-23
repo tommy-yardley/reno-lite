@@ -58,3 +58,8 @@ test("plumbing services preserve system and diameter in project exports", () => 
   assert.match(buildCadDxf(piped), /PLUMBING_COLD/);
   assert.deepEqual(parseProject(serializeProject(piped)), piped);
 });
+
+test("unplaced procurement items remain in editable project files", () => {
+  const specified = { ...project, shoppingItems: [{ id: 10, name: "Paint", quantity: 3, unitPricePence: 4200 }] };
+  assert.deepEqual(parseProject(serializeProject(specified)), specified);
+});
