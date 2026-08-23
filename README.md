@@ -1,14 +1,34 @@
 # RenoLite
 
-A browser-based tool for tracing a floor plan photo to real-world scale, then laying
-out rooms, doors, windows, walls, and furniture on top of it.
+A browser-based, CAD-first renovation planner for drawing a measured floor plan and
+using agent-produced plans as a separate visual reference.
 
-Trace a photo → calibrate it to a real measurement → draw rooms as shared-wall
-polygons → add doors/windows/wall thickness → drop in furniture → export.
+> The default editor is now the v2 CAD foundation. The previous tracing editor is
+> retained in `src/components` and `src/hooks/useFloorplanState.js` while rooms,
+> openings, furniture and exports are migrated onto the new explicit wall graph.
+
+Draw walls in real-world units → enter exact dimensions → lock verified geometry →
+keep the agent plan beside the canvas as a visual reference.
 
 ## Features
 
-**Floor plan tracing**
+**CAD foundation (default editor)**
+- Explicit node-and-wall graph stored in real-world units rather than image pixels.
+- A separate reference panel; uploading or replacing an agent plan never changes
+  the drawing, scale, or geometry.
+- Wall chains snap at 15° increments and can branch from existing wall endpoints or
+  from a newly-created anchor in the middle of a wall.
+- Exact wall length and thickness editing in metric or imperial units.
+- Wall locking protects both endpoints from direct or connected edits.
+- Anchors only appear while drawing or when their wall is selected.
+- Local persistence plus undo/redo.
+
+## Legacy implementation retained for migration
+
+The codebase still contains the following v1 features. They are not exposed by the
+default v2 editor until each is migrated onto the explicit wall graph.
+
+**Floor plan tracing (v1)**
 - Upload a photo, draw a reference line over a wall of known length, and everything
   else is measured against that scale.
 - Rooms are drawn by clicking corners; snapping onto an existing corner creates a
