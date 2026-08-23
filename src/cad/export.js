@@ -1,5 +1,6 @@
 import { openingSpan, polygonArea } from "./geometry.js";
 import { OBJECT_CATALOG } from "./catalog.js";
+import { electricalRoutePoints } from "./electrical.js";
 
 const xmlEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 
@@ -60,7 +61,12 @@ export function buildCadSvg(project) {
     if (object.mount === "floor") return `<g transform="translate(${object.x} ${object.y}) rotate(${object.rotation})"><rect x="${-object.widthInches / 2}" y="${-object.depthInches / 2}" width="${object.widthInches}" height="${object.depthInches}" rx="2" fill="#d7c7a7" stroke="#7a6f5c"/><text x="0" y="2" text-anchor="middle" font-family="sans-serif" font-size="7">${xmlEscape(object.name)}</text></g>`;
     return `<g transform="translate(${object.x} ${object.y})"><circle r="9" fill="#fff" stroke="#d4a72c"/><path d="M-6 0H6M0-6V6" stroke="#d4a72c"/><text x="0" y="2" text-anchor="middle" font-family="monospace" font-size="5">${xmlEscape(preset.symbol)}</text></g>`;
   }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}"><rect x="${bounds.minX}" y="${bounds.minY}" width="${bounds.width}" height="${bounds.height}" fill="#fff"/>${roomMarkup}${wallMarkup}${openingMarkup}${objectMarkup}</svg>`;
+  const routeMarkup = !layerVisible(project, "electrical") ? "" : (project.electricalRoutes || []).map((route) => {
+    const points = electricalRoutePoints(route, project.objects, project.walls, nodeMap);
+    const circuit = (project.electricalCircuits || []).find((item) => item.id === route.circuitId);
+    return points.length > 1 ? `<polyline points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${circuit?.colour || "#d26a3d"}" stroke-width="1.5" stroke-dasharray="5 3"/>` : "";
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}"><rect x="${bounds.minX}" y="${bounds.minY}" width="${bounds.width}" height="${bounds.height}" fill="#fff"/>${roomMarkup}${wallMarkup}${openingMarkup}${routeMarkup}${objectMarkup}</svg>`;
 }
 
 const dxfPair = (code, value) => `${code}\n${value}\n`;
@@ -105,6 +111,12 @@ export function buildCadDxf(project) {
     }
     output += dxfPair(0, "TEXT") + dxfPair(8, object.category.toUpperCase()) + dxfPair(10, x) + dxfPair(20, -y) + dxfPair(40, 6) + dxfPair(1, object.name);
   });
+  if (layerVisible(project, "electrical")) (project.electricalRoutes || []).forEach((route) => {
+    const points = electricalRoutePoints(route, project.objects, project.walls, nodeMap);
+    if (points.length < 2) return;
+    output += dxfPair(0, "LWPOLYLINE") + dxfPair(8, "ELECTRICAL_WIRING") + dxfPair(90, points.length) + dxfPair(70, 0);
+    points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
+  });
   return output + dxfPair(0, "ENDSEC") + dxfPair(0, "EOF");
 }
 
@@ -124,5 +136,7 @@ export function parseProject(text) {
     unit: project.unit || "metric",
     referenceImage: project.referenceImage || null,
     ...(project.layerSettings ? { layerSettings: project.layerSettings } : {}),
+    ...(project.electricalCircuits ? { electricalCircuits: project.electricalCircuits } : {}),
+    ...(project.electricalRoutes ? { electricalRoutes: project.electricalRoutes } : {}),
   };
 }
