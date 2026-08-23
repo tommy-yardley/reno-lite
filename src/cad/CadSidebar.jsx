@@ -10,6 +10,7 @@ import PlumbingPanel from "./PlumbingPanel";
 import ShoppingPanel from "./ShoppingPanel";
 
 export default function CadSidebar({ cad }) {
+  const [activeTab, setActiveTab] = useState("draw");
   const [lengthInput, setLengthInput] = useState("");
   const [nextLengthInput, setNextLengthInput] = useState("");
   const [thicknessInput, setThicknessInput] = useState("");
@@ -19,13 +20,44 @@ export default function CadSidebar({ cad }) {
   const end = selectedWall && nodeMap.get(selectedWall.endNodeId);
 
   useEffect(() => {
-    setLengthInput("");
-    setThicknessInput("");
-  }, [selectedWall?.id]);
+    if (!selectedWall || !start || !end) {
+      setLengthInput("");
+      setThicknessInput("");
+      return;
+    }
+    setLengthInput(unit === "metric" ? (distance(start, end) / 39.3700787).toFixed(3) : (distance(start, end) / 12).toFixed(3));
+    setThicknessInput(unit === "metric" ? (selectedWall.thicknessInches * 25.4).toFixed(0) : selectedWall.thicknessInches.toFixed(1));
+  }, [selectedWall?.id, selectedWall?.thicknessInches, start?.x, start?.y, end?.x, end?.y, unit]);
+
+  useEffect(() => {
+    if (!cad.selectedOpening) {
+      setOpeningWidthInput("");
+      return;
+    }
+    setOpeningWidthInput(unit === "metric" ? (cad.selectedOpening.widthInches * 25.4).toFixed(0) : (cad.selectedOpening.widthInches / 12).toFixed(2));
+  }, [cad.selectedOpening?.id, cad.selectedOpening?.widthInches, unit]);
+
+  useEffect(() => {
+    if (cad.selectedWallId || cad.selectedOpeningId || cad.selectedRoomId) setActiveTab("inspect");
+    else if (cad.selectedObjectId) setActiveTab("design");
+  }, [cad.selectedWallId, cad.selectedOpeningId, cad.selectedRoomId, cad.selectedObjectId]);
+
+  const tabs = [
+    ["draw", "Draw"],
+    ["inspect", "Inspect"],
+    ["design", "Design"],
+    ["export", "Export"],
+  ];
 
   return (
-    <aside className="space-y-6 border-r border-[#D8CCB0] bg-[#F3EEE3]/90 p-4 lg:min-h-[calc(100vh-82px)] lg:p-5">
-      <section>
+    <aside className="flex h-full min-h-0 flex-col bg-[#F3EEE3]/95">
+      <nav className="grid shrink-0 grid-cols-4 border-b border-[#D8CCB0] bg-[#FBF8F1] p-1" aria-label="Workspace panels">
+        {tabs.map(([value, label]) => (
+          <button key={value} onClick={() => setActiveTab(value)} className="rounded px-1 py-2 text-[11px] font-medium transition-colors" style={activeTab === value ? { background: "#1B2B3A", color: "#FBF8F1" } : { color: "#5E86A8" }} aria-current={activeTab === value ? "page" : undefined}>{label}</button>
+        ))}
+      </nav>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain p-4">
+      {activeTab === "draw" && <section>
         <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Drawing tools</h2>
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => { cad.finishWallChain(); cad.setPlacementKind(null); cad.setTool("select"); }} className="flex items-center justify-center gap-1.5 rounded-md border py-2 text-xs" style={cad.tool === "select" ? { background: "#1B2B3A", color: "#FBF8F1", borderColor: "#1B2B3A" } : { borderColor: "#D8CCB0", color: "#5E86A8" }}>
@@ -76,19 +108,19 @@ export default function CadSidebar({ cad }) {
             <button onClick={cad.finishWallChain} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Finish wall chain (Esc)</button>
           </div>
         )}
-      </section>
+      </section>}
 
-      <LayerPanel cad={cad} />
+      {activeTab === "design" && <LayerPanel cad={cad} />}
 
-      <ObjectPanel cad={cad} />
+      {activeTab === "design" && <ObjectPanel cad={cad} />}
 
-      <ElectricalPanel cad={cad} />
+      {activeTab === "design" && <ElectricalPanel cad={cad} />}
 
-      <PlumbingPanel cad={cad} />
+      {activeTab === "design" && <PlumbingPanel cad={cad} />}
 
-      <ShoppingPanel cad={cad} />
+      {activeTab === "design" && <ShoppingPanel cad={cad} />}
 
-      {cad.designWarnings.length > 0 && (
+      {activeTab === "design" && cad.designWarnings.length > 0 && (
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#B2483A]">Layout checks</h2>
           <ul className="space-y-1 rounded-lg border border-[#E2A198] bg-[#FFF1EE] p-3 text-[10px] leading-4 text-[#8D342A]">
@@ -97,9 +129,9 @@ export default function CadSidebar({ cad }) {
         </section>
       )}
 
-      <ExportPanel cad={cad} />
+      {activeTab === "export" && <ExportPanel cad={cad} />}
 
-      {cad.selectedOpening && (
+      {activeTab === "inspect" && cad.selectedOpening && (
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">{cad.selectedOpeningIds.length} selected {cad.selectedOpeningIds.length === 1 ? cad.selectedOpening.type : "openings"}</h2>
           <div className="space-y-2 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
@@ -108,7 +140,7 @@ export default function CadSidebar({ cad }) {
             <label className="block text-[11px] text-[#5B6B78]">Exact width ({unit === "metric" ? "mm" : "ft"})</label>
             <input
               value={openingWidthInput}
-              placeholder={unit === "metric" ? (cad.selectedOpening.widthInches * 25.4).toFixed(0) : (cad.selectedOpening.widthInches / 12).toFixed(2)}
+              placeholder={unit === "metric" ? "Width in mm" : "Width in ft"}
               onChange={(event) => setOpeningWidthInput(event.target.value)}
               onBlur={() => {
                 const widthInches = unit === "metric" ? Number(openingWidthInput) / 25.4 : parseLengthInput(openingWidthInput, unit);
@@ -130,7 +162,7 @@ export default function CadSidebar({ cad }) {
         </section>
       )}
 
-      {cad.openings.length > 0 && (
+      {activeTab === "inspect" && cad.openings.length > 0 && (
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Opening schedule</h2>
           <div className="overflow-hidden rounded-lg border border-[#D8CCB0] bg-[#FBF8F1]">
@@ -139,7 +171,7 @@ export default function CadSidebar({ cad }) {
         </section>
       )}
 
-      {cad.roomAreas.length > 0 && (
+      {activeTab === "inspect" && cad.roomAreas.length > 0 && (
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Rooms</h2>
           <div className="space-y-2">
@@ -166,7 +198,7 @@ export default function CadSidebar({ cad }) {
         </section>
       )}
 
-      <section>
+      {activeTab === "draw" && <section>
         <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Units</h2>
         <div className="grid grid-cols-2 gap-2">
           {[{ value: "metric", label: "m / mm" }, { value: "imperial", label: "ft / in" }].map((option) => (
@@ -174,10 +206,10 @@ export default function CadSidebar({ cad }) {
           ))}
         </div>
         <p className="mt-2 text-[10px] leading-4 text-[#8A97A3]">Geometry is stored in real-world inches internally; changing display units never rescales it.</p>
-      </section>
+      </section>}
 
-      {selectedWall && start && end && (
-        <section>
+      {activeTab === "inspect" && selectedWall && start && end && (
+        <section className="order-first">
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Selected wall</h2>
           <div className="space-y-3 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
             <div>
@@ -185,7 +217,7 @@ export default function CadSidebar({ cad }) {
               <input
                 value={lengthInput}
                 disabled={selectedWall.locked}
-                placeholder={unit === "metric" ? (distance(start, end) / 39.3700787).toFixed(3) : (distance(start, end) / 12).toFixed(3)}
+                placeholder={unit === "metric" ? "Length in metres" : "Length in feet"}
                 onChange={(event) => setLengthInput(event.target.value)}
                 onBlur={() => cad.setWallLength(selectedWall.id, parseLengthInput(lengthInput, unit))}
                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
@@ -196,7 +228,7 @@ export default function CadSidebar({ cad }) {
               <label className="mb-1 block text-[11px] text-[#5B6B78]">Thickness ({unit === "metric" ? "mm" : "in"})</label>
               <input
                 value={thicknessInput}
-                placeholder={unit === "metric" ? (selectedWall.thicknessInches * 25.4).toFixed(0) : selectedWall.thicknessInches.toFixed(1)}
+                placeholder={unit === "metric" ? "Thickness in mm" : "Thickness in inches"}
                 onChange={(event) => setThicknessInput(event.target.value)}
                 onBlur={() => {
                   const value = Number(thicknessInput);
@@ -215,6 +247,13 @@ export default function CadSidebar({ cad }) {
           </div>
         </section>
       )}
+      {activeTab === "inspect" && !selectedWall && !cad.selectedOpening && !cad.selectedRoomId && (
+        <div className="order-first rounded-lg border border-dashed border-[#B9AB8B] bg-[#FBF8F1] p-4 text-center">
+          <p className="text-sm font-medium text-[#1B2B3A]">Select something to edit</p>
+          <p className="mt-1 text-[11px] leading-4 text-[#5B6B78]">Choose a wall, opening or room on the plan. Its exact dimensions and properties will appear here.</p>
+        </div>
+      )}
+      </div>
     </aside>
   );
 }

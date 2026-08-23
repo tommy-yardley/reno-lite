@@ -110,7 +110,7 @@ export default function CadCanvas({ cad }) {
   };
 
   return (
-    <div className="relative min-h-[500px] h-[68vh] lg:h-[calc(100vh-170px)] overflow-hidden rounded-xl border border-[#D8CCB0] bg-[#FBF8F1] shadow-sm">
+    <div className="relative h-full min-h-0 overflow-hidden rounded-xl border border-[#D8CCB0] bg-[#FBF8F1] shadow-sm">
       <svg
         ref={svgRef}
         viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
@@ -314,7 +314,7 @@ export default function CadCanvas({ cad }) {
           })}
       </svg>
 
-      <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm">
+      <div className="pointer-events-none absolute left-1/2 top-3 hidden -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm sm:block">
         {tool === "wall" && (activeNodeId == null ? "Wall tool · click an anchor to begin" : "Drawing wall · click to place, or enter an exact length")}
         {tool === "select" && (selectedOpeningId != null ? `${selectedOpeningIds.length} opening${selectedOpeningIds.length === 1 ? "" : "s"} selected · drag to move, handles resize, Shift-click adds` : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : selectedRoomId != null ? "Space selected · name it or mark it as a room or void" : "Select tool · click an item or enclosed space to edit it")}
         {(tool === "door" || tool === "window") && `Place ${tool} · click a wall`}
