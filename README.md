@@ -22,6 +22,9 @@ keep the agent plan beside the canvas as a visual reference.
 - Wall locking protects both endpoints from direct or connected edits.
 - Anchors only appear while drawing or when their wall is selected.
 - Local persistence plus undo/redo.
+- Closing a wall chain creates a named, typed room with live floor area.
+- Doors and windows attach parametrically to host walls with editable widths; door
+  swings can be flipped.
 
 ## Legacy implementation retained for migration
 
