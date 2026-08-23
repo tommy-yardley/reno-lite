@@ -6,6 +6,7 @@ import { compressImageForStorage } from "../lib/imageCompression";
 export const WORKSPACE = { width: 720, height: 480 };
 const STORAGE_KEY = "reno-lite:cad-v2";
 const DEFAULT_WALL_THICKNESS_IN = 4.5;
+const DEFAULT_LAYERS = Object.fromEntries(["architecture", "furniture", "electrical", "plumbing", "dimensions", "annotations", "reference"].map((key) => [key, { visible: true, locked: false }]));
 
 function initialState() {
   try {
@@ -26,6 +27,8 @@ export function useCadState() {
   const [objects, setObjects] = useState(initial.objects || []);
   const [unit, setUnit] = useState(initial.unit);
   const [referenceImage, setReferenceImage] = useState(initial.referenceImage);
+  const [layerSettings, setLayerSettings] = useState({ ...DEFAULT_LAYERS, ...(initial.layerSettings || {}) });
+  const [activeLayer, setActiveLayer] = useState(null);
   const [tool, setTool] = useState("wall");
   const [activeNodeId, setActiveNodeId] = useState(null);
   const [chainNodeIds, setChainNodeIds] = useState([]);
@@ -110,7 +113,7 @@ export function useCadState() {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ version: 2, nodes, walls, rooms, openings, objects, unit, referenceImage })
+          JSON.stringify({ version: 2, nodes, walls, rooms, openings, objects, unit, referenceImage, layerSettings })
         );
         setSaveStatus("saved");
       } catch {
@@ -118,7 +121,7 @@ export function useCadState() {
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [nodes, walls, rooms, openings, objects, unit, referenceImage]);
+  }, [nodes, walls, rooms, openings, objects, unit, referenceImage, layerSettings]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -399,6 +402,12 @@ export function useCadState() {
 
   const onCanvasPointerDown = (event) => {
     if (event.button !== 0) return;
+    if (["wall", "door", "window"].includes(tool) && layerSettings.architecture.locked) return;
+    if (tool === "object" && placementKind) {
+      const preset = OBJECT_CATALOG[placementKind];
+      const layer = preset.category === "Electrical" || preset.category === "Lighting" ? "electrical" : preset.category === "Plumbing" ? "plumbing" : "furniture";
+      if (layerSettings[layer].locked) return;
+    }
     const point = clientToWorld(event.clientX, event.clientY);
     if (tool === "wall") addWallPoint(point);
     else if (tool === "object" && OBJECT_CATALOG[placementKind]?.mount !== "wall") createObject(point);
@@ -696,6 +705,8 @@ export function useCadState() {
     setObjects((items) => items.map((object) => (object.id === objectId ? { ...object, ...updates } : object)));
   };
 
+  const updateLayer = (layer, updates) => setLayerSettings((settings) => ({ ...settings, [layer]: { ...settings[layer], ...updates } }));
+
   const deleteObject = (objectId) => {
     pushHistory();
     setObjects((items) => items.filter((object) => object.id !== objectId));
@@ -712,6 +723,7 @@ export function useCadState() {
     setObjects(project.objects || []);
     setUnit(project.unit || "metric");
     setReferenceImage(project.referenceImage || null);
+    setLayerSettings({ ...DEFAULT_LAYERS, ...(project.layerSettings || {}) });
     const ids = [...(project.nodes || []), ...(project.walls || []), ...(project.rooms || []), ...(project.openings || []), ...(project.objects || [])].map((item) => item.id || 0);
     nextId.current = Math.max(0, ...ids) + 1;
     finishWallChain();
@@ -732,6 +744,8 @@ export function useCadState() {
     setOpenings([]);
     setObjects([]);
     setReferenceImage(null);
+    setLayerSettings(DEFAULT_LAYERS);
+    setActiveLayer(null);
     nextId.current = 1;
     finishWallChain();
     setSelectedWallId(null);
@@ -805,6 +819,10 @@ export function useCadState() {
     setAngleSnap,
     referenceImage,
     setReferenceImage,
+    layerSettings,
+    updateLayer,
+    activeLayer,
+    setActiveLayer,
     handleReferenceUpload,
     onCanvasPointerDown,
     onCanvasPointerMove,

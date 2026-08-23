@@ -4,6 +4,7 @@ import { distance } from "./geometry";
 import { parseLengthInput } from "../lib/units";
 import ObjectPanel from "./ObjectPanel";
 import ExportPanel from "./ExportPanel";
+import LayerPanel from "./LayerPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -73,6 +74,8 @@ export default function CadSidebar({ cad }) {
           </div>
         )}
       </section>
+
+      <LayerPanel cad={cad} />
 
       <ObjectPanel cad={cad} />
 
