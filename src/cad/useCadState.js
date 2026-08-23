@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, validateDesignLayout, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
+import { validateElectrical } from "./electrical";
 
 export const WORKSPACE = { width: 720, height: 480 };
 const STORAGE_KEY = "reno-lite:cad-v2";
 const DEFAULT_WALL_THICKNESS_IN = 4.5;
+const DEFAULT_LAYERS = Object.fromEntries(["architecture", "furniture", "electrical", "plumbing", "dimensions", "annotations", "reference"].map((key) => [key, { visible: true, locked: false }]));
 
 function initialState() {
   try {
@@ -24,8 +26,12 @@ export function useCadState() {
   const [rooms, setRooms] = useState(initial.rooms || []);
   const [openings, setOpenings] = useState(initial.openings || []);
   const [objects, setObjects] = useState(initial.objects || []);
+  const [electricalCircuits, setElectricalCircuits] = useState(initial.electricalCircuits || []);
+  const [electricalRoutes, setElectricalRoutes] = useState(initial.electricalRoutes || []);
   const [unit, setUnit] = useState(initial.unit);
   const [referenceImage, setReferenceImage] = useState(initial.referenceImage);
+  const [layerSettings, setLayerSettings] = useState({ ...DEFAULT_LAYERS, ...(initial.layerSettings || {}) });
+  const [activeLayer, setActiveLayer] = useState(null);
   const [tool, setTool] = useState("wall");
   const [activeNodeId, setActiveNodeId] = useState(null);
   const [chainNodeIds, setChainNodeIds] = useState([]);
@@ -45,7 +51,7 @@ export function useCadState() {
   const [angleSnap, setAngleSnap] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const nextId = useRef(
-    Math.max(0, ...initial.nodes.map((node) => node.id), ...initial.walls.map((wall) => wall.id), ...(initial.rooms || []).map((room) => room.id), ...(initial.openings || []).map((opening) => opening.id), ...(initial.objects || []).map((object) => object.id)) + 1
+    Math.max(0, ...initial.nodes.map((node) => node.id), ...initial.walls.map((wall) => wall.id), ...(initial.rooms || []).map((room) => room.id), ...(initial.openings || []).map((opening) => opening.id), ...(initial.objects || []).map((object) => object.id), ...(initial.electricalCircuits || []).map((item) => item.id), ...(initial.electricalRoutes || []).map((item) => item.id)) + 1
   );
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -70,8 +76,9 @@ export function useCadState() {
   );
   const drawingWarnings = useMemo(() => validateCadGraph({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
   const designValidation = useMemo(() => validateDesignLayout({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
+  const electricalWarnings = useMemo(() => validateElectrical({ objects, circuits: electricalCircuits, routes: electricalRoutes }), [objects, electricalCircuits, electricalRoutes]);
 
-  const snapshot = useCallback(() => ({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
+  const snapshot = useCallback(() => ({ nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes }), [nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes]);
   const pushHistory = useCallback(() => {
     undoStack.current.push(snapshot());
     if (undoStack.current.length > 100) undoStack.current.shift();
@@ -87,6 +94,8 @@ export function useCadState() {
     setRooms(previous.rooms || []);
     setOpenings(previous.openings || []);
     setObjects(previous.objects || []);
+    setElectricalCircuits(previous.electricalCircuits || []);
+    setElectricalRoutes(previous.electricalRoutes || []);
     setSelectedWallId(null);
     setActiveNodeId(null);
   };
@@ -100,6 +109,8 @@ export function useCadState() {
     setRooms(next.rooms || []);
     setOpenings(next.openings || []);
     setObjects(next.objects || []);
+    setElectricalCircuits(next.electricalCircuits || []);
+    setElectricalRoutes(next.electricalRoutes || []);
     setSelectedWallId(null);
     setActiveNodeId(null);
   };
@@ -110,7 +121,7 @@ export function useCadState() {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ version: 2, nodes, walls, rooms, openings, objects, unit, referenceImage })
+          JSON.stringify({ version: 2, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, unit, referenceImage, layerSettings })
         );
         setSaveStatus("saved");
       } catch {
@@ -118,7 +129,7 @@ export function useCadState() {
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [nodes, walls, rooms, openings, objects, unit, referenceImage]);
+  }, [nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, unit, referenceImage, layerSettings]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -399,6 +410,12 @@ export function useCadState() {
 
   const onCanvasPointerDown = (event) => {
     if (event.button !== 0) return;
+    if (["wall", "door", "window"].includes(tool) && layerSettings.architecture.locked) return;
+    if (tool === "object" && placementKind) {
+      const preset = OBJECT_CATALOG[placementKind];
+      const layer = preset.category === "Electrical" || preset.category === "Lighting" ? "electrical" : preset.category === "Plumbing" ? "plumbing" : "furniture";
+      if (layerSettings[layer].locked) return;
+    }
     const point = clientToWorld(event.clientX, event.clientY);
     if (tool === "wall") addWallPoint(point);
     else if (tool === "object" && OBJECT_CATALOG[placementKind]?.mount !== "wall") createObject(point);
@@ -696,9 +713,43 @@ export function useCadState() {
     setObjects((items) => items.map((object) => (object.id === objectId ? { ...object, ...updates } : object)));
   };
 
+  const updateLayer = (layer, updates) => setLayerSettings((settings) => ({ ...settings, [layer]: { ...settings[layer], ...updates } }));
+
+  const addElectricalCircuit = () => {
+    pushHistory();
+    const colours = ["#C0392B", "#2E86C1", "#8E44AD", "#D68910", "#148F77"];
+    const circuit = { id: nextId.current++, name: `Circuit ${electricalCircuits.length + 1}`, kind: "general", ratingAmps: 32, colour: colours[electricalCircuits.length % colours.length] };
+    setElectricalCircuits((items) => [...items, circuit]);
+    return circuit.id;
+  };
+
+  const updateElectricalCircuit = (circuitId, updates) => {
+    pushHistory();
+    setElectricalCircuits((items) => items.map((circuit) => circuit.id === circuitId ? { ...circuit, ...updates } : circuit));
+  };
+
+  const deleteElectricalCircuit = (circuitId) => {
+    pushHistory();
+    setElectricalCircuits((items) => items.filter((circuit) => circuit.id !== circuitId));
+    setElectricalRoutes((items) => items.filter((route) => route.circuitId !== circuitId));
+    setObjects((items) => items.map((object) => object.circuitId === circuitId ? { ...object, circuitId: null } : object));
+  };
+
+  const addElectricalRoute = (fromObjectId, toObjectId, circuitId) => {
+    if (!fromObjectId || !toObjectId || fromObjectId === toObjectId) return;
+    pushHistory();
+    setElectricalRoutes((items) => [...items, { id: nextId.current++, fromObjectId, toObjectId, circuitId: circuitId || null, via: [] }]);
+  };
+
+  const deleteElectricalRoute = (routeId) => {
+    pushHistory();
+    setElectricalRoutes((items) => items.filter((route) => route.id !== routeId));
+  };
+
   const deleteObject = (objectId) => {
     pushHistory();
     setObjects((items) => items.filter((object) => object.id !== objectId));
+    setElectricalRoutes((items) => items.filter((route) => route.fromObjectId !== objectId && route.toObjectId !== objectId));
     setSelectedObjectId(null);
     setSelectedRoomId(null);
   };
@@ -710,9 +761,12 @@ export function useCadState() {
     setRooms(project.rooms || []);
     setOpenings(project.openings || []);
     setObjects(project.objects || []);
+    setElectricalCircuits(project.electricalCircuits || []);
+    setElectricalRoutes(project.electricalRoutes || []);
     setUnit(project.unit || "metric");
     setReferenceImage(project.referenceImage || null);
-    const ids = [...(project.nodes || []), ...(project.walls || []), ...(project.rooms || []), ...(project.openings || []), ...(project.objects || [])].map((item) => item.id || 0);
+    setLayerSettings({ ...DEFAULT_LAYERS, ...(project.layerSettings || {}) });
+    const ids = [...(project.nodes || []), ...(project.walls || []), ...(project.rooms || []), ...(project.openings || []), ...(project.objects || []), ...(project.electricalCircuits || []), ...(project.electricalRoutes || [])].map((item) => item.id || 0);
     nextId.current = Math.max(0, ...ids) + 1;
     finishWallChain();
     setSelectedWallId(null);
@@ -731,7 +785,11 @@ export function useCadState() {
     setRooms([]);
     setOpenings([]);
     setObjects([]);
+    setElectricalCircuits([]);
+    setElectricalRoutes([]);
     setReferenceImage(null);
+    setLayerSettings(DEFAULT_LAYERS);
+    setActiveLayer(null);
     nextId.current = 1;
     finishWallChain();
     setSelectedWallId(null);
@@ -774,6 +832,9 @@ export function useCadState() {
     warningObjectIds: designValidation.objectIds,
     openings,
     objects,
+    electricalCircuits,
+    electricalRoutes,
+    electricalWarnings,
     nodeMap,
     unit,
     setUnit,
@@ -805,6 +866,15 @@ export function useCadState() {
     setAngleSnap,
     referenceImage,
     setReferenceImage,
+    layerSettings,
+    updateLayer,
+    activeLayer,
+    setActiveLayer,
+    addElectricalCircuit,
+    updateElectricalCircuit,
+    deleteElectricalCircuit,
+    addElectricalRoute,
+    deleteElectricalRoute,
     handleReferenceUpload,
     onCanvasPointerDown,
     onCanvasPointerMove,

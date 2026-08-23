@@ -52,6 +52,12 @@ keep the agent plan beside the canvas as a visual reference.
 - Pan, wheel/button zoom, fit-to-plan, live length/angle preview, keyboard deletion,
   graph-integrity warnings, and a recoverable new-project flow round out editing.
 - Reference images are downscaled for local persistence and have independent zoom.
+- Architecture, furniture, electrical, plumbing, dimensions, annotations, and
+  reference layers can be shown, hidden, locked, or focused. Hidden disciplines are
+  omitted from clean drawing exports.
+- UK electrical planning includes sockets, FCUs, isolators, alarms, fans, switches,
+  dimmers, and lighting. Devices can be assigned to named rated circuits, switches
+  linked to lights, and explicit wiring routes exported to SVG and DXF.
 
 ## Legacy implementation retained for migration
 

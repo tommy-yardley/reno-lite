@@ -42,6 +42,9 @@ export default function ExportPanel({ cad }) {
     objects: cad.objects,
     unit: cad.unit,
     referenceImage: cad.referenceImage,
+    layerSettings: cad.layerSettings,
+    electricalCircuits: cad.electricalCircuits,
+    electricalRoutes: cad.electricalRoutes,
   };
   const printScales = PRINT_SCALES[cad.unit] || PRINT_SCALES.metric;
   const selectedScale = printScales.find((scale) => scale.key === scaleKey) || printScales.find((scale) => scale.default) || printScales[0];

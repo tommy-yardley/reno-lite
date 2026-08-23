@@ -4,6 +4,8 @@ import { distance } from "./geometry";
 import { parseLengthInput } from "../lib/units";
 import ObjectPanel from "./ObjectPanel";
 import ExportPanel from "./ExportPanel";
+import LayerPanel from "./LayerPanel";
+import ElectricalPanel from "./ElectricalPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -74,7 +76,11 @@ export default function CadSidebar({ cad }) {
         )}
       </section>
 
+      <LayerPanel cad={cad} />
+
       <ObjectPanel cad={cad} />
+
+      <ElectricalPanel cad={cad} />
 
       {cad.designWarnings.length > 0 && (
         <section>

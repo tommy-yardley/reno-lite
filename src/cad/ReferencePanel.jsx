@@ -18,6 +18,9 @@ export default function ReferencePanel({ cad }) {
         )}
       </div>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleReferenceUpload} />
+      {!cad.layerSettings.reference.visible && <div className="flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[#D8CCB0] text-center text-xs text-[#8A97A3]">Reference layer hidden</div>}
+      {cad.layerSettings.reference.visible && (
+      <>
       {referenceImage ? (
         <div className="flex h-[calc(100%-64px)] min-h-[260px] flex-col">
           <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[#D8CCB0] bg-white p-2">
@@ -37,6 +40,8 @@ export default function ReferencePanel({ cad }) {
           <span className="text-xs font-medium">Add agent floor plan</span>
           <span className="max-w-[190px] text-[10px] text-[#8A97A3]">Keep it beside the measured drawing for comparison.</span>
         </button>
+      )}
+      </>
       )}
     </aside>
   );
