@@ -5,7 +5,7 @@ export default function ReferencePanel({ cad }) {
   const [zoom, setZoom] = useState(100);
   const { referenceImage, fileInputRef, handleReferenceUpload, setReferenceImage } = cad;
   return (
-    <aside className="rounded-xl border border-[#D8CCB0] bg-[#F3EEE3] p-3 shadow-sm lg:h-[calc(100vh-170px)]">
+    <aside className="h-full min-h-0 rounded-xl border border-[#D8CCB0] bg-[#F3EEE3] p-3 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="serif text-sm font-semibold text-[#1B2B3A]">Reference plan</h2>
