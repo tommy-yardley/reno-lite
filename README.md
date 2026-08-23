@@ -55,6 +55,9 @@ keep the agent plan beside the canvas as a visual reference.
 - Architecture, furniture, electrical, plumbing, dimensions, annotations, and
   reference layers can be shown, hidden, locked, or focused. Hidden disciplines are
   omitted from clean drawing exports.
+- UK electrical planning includes sockets, FCUs, isolators, alarms, fans, switches,
+  dimmers, and lighting. Devices can be assigned to named rated circuits, switches
+  linked to lights, and explicit wiring routes exported to SVG and DXF.
 
 ## Legacy implementation retained for migration
 

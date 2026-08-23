@@ -4,6 +4,7 @@ import { distance, openingSpan, polygonArea } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
 import { OBJECT_CATALOG } from "./catalog";
+import { electricalRoutePoints } from "./electrical";
 
 export default function CadCanvas({ cad }) {
   const [view, setView] = useState({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
@@ -16,6 +17,7 @@ export default function CadCanvas({ cad }) {
     rooms,
     openings,
     objects,
+    electricalRoutes,
     nodeMap,
     unit,
     tool,
@@ -234,6 +236,13 @@ export default function CadCanvas({ cad }) {
               </>}
             </g>
           );
+        })}
+
+        {electricalRoutes.map((route) => {
+          const points = electricalRoutePoints(route, objects, walls, nodeMap);
+          const circuit = cad.electricalCircuits.find((item) => item.id === route.circuitId);
+          if (points.length < 2) return null;
+          return <g key={route.id} style={{ ...layerStyle("electrical"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={circuit?.colour || "#D26A3D"} strokeWidth="1.5" strokeDasharray="5 3" /><text x={points[1].x} y={points[1].y - 3} fontSize="6" fill={circuit?.colour || "#D26A3D"} className="mono">{circuit?.name || "WIRE"}</text></g>;
         })}
 
         {objects.map((object) => {
