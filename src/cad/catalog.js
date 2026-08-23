@@ -46,6 +46,16 @@ export const OBJECT_CATALOG = {
   pendant: { label: "Pendant light", category: "Lighting", mount: "free", symbol: "P" },
   downlight: { label: "Recessed downlight", category: "Lighting", mount: "free", symbol: "DL" },
   wallLight: { label: "Wall light", category: "Lighting", mount: "wall", symbol: "WL" },
+  wc: floor("WC", "Plumbing", 400, 700),
+  basin: floor("Basin", "Plumbing", 600, 450),
+  bath: floor("1700 bath", "Plumbing", 1700, 700),
+  showerTray: floor("900 shower tray", "Plumbing", 900, 900),
+  kitchenSink: floor("Kitchen sink", "Plumbing", 600, 500),
+  hotWaterCylinder: floor("Hot water cylinder", "Plumbing", 600, 600),
+  boiler: { label: "Boiler", category: "Plumbing", mount: "wall", symbol: "BLR" },
+  plumbingManifold: { label: "Plumbing manifold", category: "Plumbing", mount: "wall", symbol: "MAN" },
+  soilStack: { label: "Soil stack", category: "Plumbing", mount: "free", symbol: "SVP" },
+  stopcock: { label: "Stopcock", category: "Plumbing", mount: "wall", symbol: "SC" },
 };
 
-export const CATALOG_GROUPS = ["Living", "Dining", "Bedroom", "Office", "Kitchen", "Utility", "Storage", "Electrical", "Lighting", "Heating"];
+export const CATALOG_GROUPS = ["Living", "Dining", "Bedroom", "Office", "Kitchen", "Utility", "Storage", "Electrical", "Lighting", "Heating", "Plumbing"];
