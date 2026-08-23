@@ -32,6 +32,9 @@ keep the agent plan beside the canvas as a visual reference.
 - Doors and windows attach parametrically to host walls with editable widths; door
   swings can be flipped. Selected openings expose direct resize handles and UK metric
   size presets.
+- Openings can be dragged along host walls, Shift-selected, bulk-resized, duplicated,
+  assigned a subtype, and reviewed in a live opening schedule. Doors support separate
+  hinge and swing direction controls.
 - Furniture presets can be placed, dragged, resized, and rotated independently of
   room geometry.
 - A UK-oriented metric catalogue covers standard living, dining, bedroom, office,
