@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nodeIsConstrained, openingSpan, polygonArea, projectToSegment, snapAngle, wallKey } from "./geometry.js";
+import { nodeIsConstrained, projectToSegment, snapAngle, wallKey } from "./geometry.js";
 
 test("snapAngle snaps to 15 degree increments while preserving length", () => {
   const point = snapAngle({ x: 0, y: 0 }, { x: 10, y: 4 });
@@ -23,14 +23,4 @@ test("a node attached to a locked wall is constrained", () => {
 
 test("wallKey is stable regardless of direction", () => {
   assert.equal(wallKey(7, 2), wallKey(2, 7));
-});
-
-test("polygonArea measures room area in square drawing units", () => {
-  assert.equal(polygonArea([{ x: 0, y: 0 }, { x: 120, y: 0 }, { x: 120, y: 120 }, { x: 0, y: 120 }]), 14400);
-});
-
-test("openingSpan centers an opening along its host wall", () => {
-  const span = openingSpan({ x: 0, y: 0 }, { x: 120, y: 0 }, 0.5, 36);
-  assert.deepEqual(span.start, { x: 42, y: 0 });
-  assert.deepEqual(span.end, { x: 78, y: 0 });
 });

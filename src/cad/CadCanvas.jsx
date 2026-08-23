@@ -1,6 +1,6 @@
 import React from "react";
 import { Lock } from "lucide-react";
-import { distance, openingSpan, polygonArea } from "./geometry";
+import { distance } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
 
@@ -9,21 +9,17 @@ export default function CadCanvas({ cad }) {
     svgRef,
     nodes,
     walls,
-    rooms,
-    openings,
     nodeMap,
     unit,
     tool,
     activeNodeId,
     selectedWallId,
-    selectedOpeningId,
     pointer,
     onCanvasPointerDown,
     onCanvasPointerMove,
     onCanvasPointerUp,
     onNodePointerDown,
     onWallPointerDown,
-    onOpeningPointerDown,
     isNodeLocked,
   } = cad;
 
@@ -60,24 +56,6 @@ export default function CadCanvas({ cad }) {
           </pattern>
         </defs>
         <rect width={WORKSPACE.width} height={WORKSPACE.height} fill="url(#major-grid)" />
-
-        {rooms.map((room) => {
-          const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
-          if (points.length < 3) return null;
-          const center = {
-            x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-            y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
-          };
-          return (
-            <g key={room.id} style={{ pointerEvents: "none" }}>
-              <polygon points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill={room.color || "#B9D8C2"} fillOpacity="0.34" />
-              <text x={center.x} y={center.y - 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="#1B2B3A" className="serif">{room.name}</text>
-              <text x={center.x} y={center.y + 10} textAnchor="middle" fontSize="7" fill="#5B6B78" className="mono">
-                {unit === "metric" ? `${(polygonArea(points) / (39.3700787 ** 2)).toFixed(1)} m²` : `${(polygonArea(points) / 144).toFixed(1)} ft²`}
-              </text>
-            </g>
-          );
-        })}
 
         {walls.map((wall) => {
           const start = nodeMap.get(wall.startNodeId);
@@ -123,35 +101,6 @@ export default function CadCanvas({ cad }) {
             style={{ pointerEvents: "none" }}
           />
         )}
-
-        {openings.map((opening) => {
-          const wall = walls.find((item) => item.id === opening.wallId);
-          const start = wall && nodeMap.get(wall.startNodeId);
-          const end = wall && nodeMap.get(wall.endNodeId);
-          if (!wall || !start || !end) return null;
-          const span = openingSpan(start, end, opening.t, opening.widthInches);
-          const normal = { x: -span.direction.y, y: span.direction.x };
-          const selected = opening.id === selectedOpeningId;
-          if (opening.type === "window") {
-            return (
-              <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
-                <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
-                <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke={selected ? "#2F78C4" : "#5E86A8"} strokeWidth="3" />
-                <line x1={span.start.x + normal.x * 4} y1={span.start.y + normal.y * 4} x2={span.end.x + normal.x * 4} y2={span.end.y + normal.y * 4} stroke="#5E86A8" strokeWidth="1" />
-              </g>
-            );
-          }
-          const hinge = span.start;
-          const leafEnd = { x: hinge.x + normal.x * span.width * opening.swing, y: hinge.y + normal.y * span.width * opening.swing };
-          const sweep = opening.swing > 0 ? 1 : 0;
-          return (
-            <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
-              <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
-              <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
-              <path d={`M ${span.end.x} ${span.end.y} A ${span.width} ${span.width} 0 0 ${sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
-            </g>
-          );
-        })}
 
         {nodes
           .filter((node) => visibleNodeIds.has(node.id))
