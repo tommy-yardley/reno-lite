@@ -18,7 +18,7 @@ export default function TracePanel({ fp }) {
       </h2>
       <label className="flex items-center gap-2 text-xs mb-2 cursor-pointer" style={{ color: "#5E86A8" }}>
         <input type="checkbox" checked={angleSnap} onChange={(e) => setAngleSnap(e.target.checked)} className="accent-[#B8863E]" />
-        Snap to 45° angles while tracing
+        Snap to 15° angles while tracing and dragging corners
       </label>
       <div className="flex flex-col gap-2">
         <button onClick={() => startDrawingRoom("room")} className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm font-medium" style={{ background: "#B8863E", color: "#FBF8F1" }}>
