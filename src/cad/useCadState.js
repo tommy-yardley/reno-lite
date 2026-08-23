@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, wallKey } from "./geometry";
+import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, validateDesignLayout, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
 
@@ -58,6 +58,7 @@ export function useCadState() {
     [nodeMap, rooms]
   );
   const drawingWarnings = useMemo(() => validateCadGraph({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
+  const designValidation = useMemo(() => validateDesignLayout({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
 
   const snapshot = useCallback(() => ({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
   const pushHistory = useCallback(() => {
@@ -639,6 +640,8 @@ export function useCadState() {
     rooms,
     roomAreas,
     drawingWarnings,
+    designWarnings: designValidation.warnings,
+    warningObjectIds: designValidation.objectIds,
     openings,
     objects,
     nodeMap,

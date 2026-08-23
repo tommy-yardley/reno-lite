@@ -76,6 +76,15 @@ export default function CadSidebar({ cad }) {
 
       <ObjectPanel cad={cad} />
 
+      {cad.designWarnings.length > 0 && (
+        <section>
+          <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#B2483A]">Layout checks</h2>
+          <ul className="space-y-1 rounded-lg border border-[#E2A198] bg-[#FFF1EE] p-3 text-[10px] leading-4 text-[#8D342A]">
+            {cad.designWarnings.map((warning, index) => <li key={`${warning}-${index}`}>• {warning}</li>)}
+          </ul>
+        </section>
+      )}
+
       <ExportPanel cad={cad} />
 
       {cad.selectedOpening && (
