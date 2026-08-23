@@ -33,6 +33,9 @@ keep the agent plan beside the canvas as a visual reference.
 - DXF exports real-inch wall/opening geometry, dimensions, and renovation-object
   labels on separate CAD layers.
 - Editable RenoLite project files can be saved and reopened on another device.
+- Pan, wheel/button zoom, fit-to-plan, live length/angle preview, keyboard deletion,
+  graph-integrity warnings, and a recoverable new-project flow round out editing.
+- Reference images are downscaled for local persistence and have independent zoom.
 
 ## Legacy implementation retained for migration
 

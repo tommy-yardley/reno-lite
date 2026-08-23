@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { distance, nodeIsConstrained, polygonArea, projectToSegment, snapAngle, wallKey } from "./geometry";
+import { distance, nodeIsConstrained, polygonArea, projectToSegment, snapAngle, validateCadGraph, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
+import { compressImageForStorage } from "../lib/imageCompression";
 
 export const WORKSPACE = { width: 720, height: 480 };
 const STORAGE_KEY = "reno-lite:cad-v2";
@@ -54,6 +55,7 @@ export function useCadState() {
     () => rooms.map((room) => ({ ...room, areaSqInches: polygonArea(room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)) })),
     [nodeMap, rooms]
   );
+  const drawingWarnings = useMemo(() => validateCadGraph({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
 
   const snapshot = useCallback(() => ({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
   const pushHistory = useCallback(() => {
@@ -109,11 +111,21 @@ export function useCadState() {
       if (event.key === "Escape") {
         finishWallChain();
         setDraggingNodeId(null);
+        setDraggingObjectId(null);
+        setPlacementKind(null);
+        setTool("select");
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         if (event.shiftKey) redo();
         else undo();
+      }
+      const editingField = ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName);
+      if (!editingField && (event.key === "Delete" || event.key === "Backspace")) {
+        event.preventDefault();
+        if (selectedObjectId != null) deleteObject(selectedObjectId);
+        else if (selectedOpeningId != null) deleteOpening(selectedOpeningId);
+        else if (selectedWallId != null) deleteSelectedWall();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -534,13 +546,37 @@ export function useCadState() {
     setTool("select");
   };
 
+  const clearProject = () => {
+    pushHistory();
+    setNodes([]);
+    setWalls([]);
+    setRooms([]);
+    setOpenings([]);
+    setObjects([]);
+    setReferenceImage(null);
+    nextId.current = 1;
+    finishWallChain();
+    setSelectedWallId(null);
+    setSelectedOpeningId(null);
+    setSelectedObjectId(null);
+    setPlacementKind(null);
+    setTool("wall");
+  };
+
   const handleReferenceUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const image = new Image();
-      image.onload = () => setReferenceImage({ src: reader.result, name: file.name, width: image.naturalWidth, height: image.naturalHeight });
+      image.onload = async () => {
+        try {
+          const compressed = await compressImageForStorage(reader.result, image.naturalWidth, image.naturalHeight, 1800, 0.82);
+          setReferenceImage({ src: compressed.src, name: file.name, width: compressed.w, height: compressed.h });
+        } catch {
+          setReferenceImage({ src: reader.result, name: file.name, width: image.naturalWidth, height: image.naturalHeight });
+        }
+      };
       image.src = reader.result;
     };
     reader.readAsDataURL(file);
@@ -554,6 +590,7 @@ export function useCadState() {
     walls,
     rooms,
     roomAreas,
+    drawingWarnings,
     openings,
     objects,
     nodeMap,
@@ -600,6 +637,7 @@ export function useCadState() {
     updateObject,
     deleteObject,
     loadProject,
+    clearProject,
     isNodeLocked: (nodeId) => nodeIsConstrained(nodeId, walls),
     saveStatus,
     undo,
