@@ -3,6 +3,7 @@ import { Lock, LockOpen, MousePointer2, Pencil, Trash2 } from "lucide-react";
 import { distance } from "./geometry";
 import { parseLengthInput } from "../lib/units";
 import ObjectPanel from "./ObjectPanel";
+import ExportPanel from "./ExportPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -41,6 +42,8 @@ export default function CadSidebar({ cad }) {
       </section>
 
       <ObjectPanel cad={cad} />
+
+      <ExportPanel cad={cad} />
 
       {cad.selectedOpening && (
         <section>
