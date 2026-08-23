@@ -7,6 +7,7 @@ import ExportPanel from "./ExportPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
+  const [nextLengthInput, setNextLengthInput] = useState("");
   const [thicknessInput, setThicknessInput] = useState("");
   const [openingWidthInput, setOpeningWidthInput] = useState("");
   const { selectedWall, nodeMap, unit } = cad;
@@ -37,7 +38,39 @@ export default function CadSidebar({ cad }) {
           Snap walls every 15°
         </label>
         {cad.activeNodeId != null && (
-          <button onClick={cad.finishWallChain} className="mt-2 w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Finish wall chain (Esc)</button>
+          <div className="mt-2 space-y-2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1] p-2">
+            <label className="block text-[11px] text-[#5B6B78]">Next wall length ({unit === "metric" ? "m" : "ft"})</label>
+            <div className="flex gap-2">
+              <input
+                value={nextLengthInput}
+                placeholder={unit === "metric" ? "e.g. 3.25" : "e.g. 10' 8\""}
+                onChange={(event) => setNextLengthInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  const inches = parseLengthInput(nextLengthInput, unit);
+                  if (inches) {
+                    cad.addWallAtLength(inches);
+                    setNextLengthInput("");
+                  }
+                }}
+                className="mono min-w-0 flex-1 rounded border border-[#D8CCB0] px-2 py-1.5 text-xs"
+              />
+              <button
+                onClick={() => {
+                  const inches = parseLengthInput(nextLengthInput, unit);
+                  if (inches) {
+                    cad.addWallAtLength(inches);
+                    setNextLengthInput("");
+                  }
+                }}
+                className="rounded bg-[#B8863E] px-3 py-1.5 text-xs text-[#FBF8F1]"
+              >
+                Add
+              </button>
+            </div>
+            <p className="text-[10px] leading-4 text-[#8A97A3]">Uses the live pointer direction and current 15° snap.</p>
+            <button onClick={cad.finishWallChain} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Finish wall chain (Esc)</button>
+          </div>
         )}
       </section>
 
