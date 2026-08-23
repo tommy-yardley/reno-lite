@@ -256,7 +256,7 @@ export default function CadCanvas({ cad }) {
 
         {objects.map((object) => {
           const preset = OBJECT_CATALOG[object.kind] || {};
-          const selected = object.id === selectedObjectId;
+          const selected = cad.selectedObjectIds.includes(object.id);
           const warning = cad.warningObjectIds.includes(object.id);
           const objectLayer = object.category === "Electrical" || object.category === "Lighting" ? "electrical" : object.category === "Plumbing" ? "plumbing" : "furniture";
           if (object.mount === "wall") {

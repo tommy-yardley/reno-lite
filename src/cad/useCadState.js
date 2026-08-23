@@ -4,6 +4,7 @@ import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
 import { validateElectrical } from "./electrical";
 import { validatePlumbing } from "./plumbing";
+import { alignObjects, arrangementCandidates, distributeObjects } from "./layout";
 
 export const WORKSPACE = { width: 720, height: 480 };
 const STORAGE_KEY = "reno-lite:cad-v2";
@@ -43,6 +44,7 @@ export function useCadState() {
   const [selectedOpeningId, setSelectedOpeningId] = useState(null);
   const [selectedOpeningIds, setSelectedOpeningIds] = useState([]);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState([]);
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [placementKind, setPlacementKind] = useState(null);
   const [pointer, setPointer] = useState(null);
@@ -61,6 +63,7 @@ export function useCadState() {
   const undoStack = useRef([]);
   const redoStack = useRef([]);
   const wallDragRef = useRef(null);
+  const objectDragRef = useRef(null);
   const openingResizeRef = useRef(null);
   const openingMoveRef = useRef(null);
 
@@ -244,6 +247,7 @@ export function useCadState() {
     setPlacementKind(kind);
     setTool("object");
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
@@ -269,6 +273,7 @@ export function useCadState() {
     pushHistory();
     setObjects((items) => [...items, object]);
     setSelectedObjectId(object.id);
+    setSelectedObjectIds([object.id]);
     setPlacementKind(null);
     setTool("select");
   };
@@ -432,6 +437,7 @@ export function useCadState() {
       setSelectedOpeningId(null);
       setSelectedOpeningIds([]);
       setSelectedObjectId(null);
+      setSelectedObjectIds([]);
       setSelectedRoomId(null);
     }
   };
@@ -447,7 +453,12 @@ export function useCadState() {
       setNodes((items) => items.map((node) => (node.id === draggingNodeId ? { ...node, ...point } : node)));
     }
     if (draggingObjectId != null) {
-      setObjects((items) => items.map((object) => (object.id === draggingObjectId ? { ...object, x: point.x, y: point.y } : object)));
+      const drag = objectDragRef.current;
+      if (drag) {
+        const dx = rawPoint.x - drag.pointer.x;
+        const dy = rawPoint.y - drag.pointer.y;
+        setObjects((items) => items.map((object) => drag.positions.has(object.id) ? { ...object, x: drag.positions.get(object.id).x + dx, y: drag.positions.get(object.id).y + dy } : object));
+      }
     }
     if (draggingWallId != null && wallDragRef.current) {
       const dx = rawPoint.x - wallDragRef.current.pointer.x;
@@ -513,6 +524,7 @@ export function useCadState() {
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedRoomId(null);
     const wall = walls.find((item) => item.id === wallId);
     const start = wall && nodeMap.get(wall.startNodeId);
@@ -537,6 +549,8 @@ export function useCadState() {
     setSelectedOpeningId(openingId);
     setSelectedOpeningIds([openingId]);
     setSelectedWallId(null);
+    setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedRoomId(null);
     setTool("select");
     const wall = opening && walls.find((item) => item.id === opening.wallId);
@@ -566,6 +580,7 @@ export function useCadState() {
     setSelectedOpeningIds([openingId]);
     setSelectedWallId(null);
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedRoomId(null);
     openingResizeRef.current = { openingId, handle, wallLength, fixedT: handle === "start" ? opening.t + halfT : opening.t - halfT, start: { ...start }, end: { ...end } };
     setResizingOpening({ openingId, handle });
@@ -574,15 +589,27 @@ export function useCadState() {
   const onObjectPointerDown = (objectId) => (event) => {
     event.stopPropagation();
     const object = objects.find((item) => item.id === objectId);
+    if (event.shiftKey) {
+      const nextIds = selectedObjectIds.includes(objectId) ? selectedObjectIds.filter((id) => id !== objectId) : [...selectedObjectIds, objectId];
+      setSelectedObjectIds(nextIds);
+      setSelectedObjectId(nextIds.includes(objectId) ? objectId : nextIds.at(-1) || null);
+      return;
+    }
     setSelectedObjectId(objectId);
+    if (!selectedObjectIds.includes(objectId)) setSelectedObjectIds([objectId]);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
     setSelectedRoomId(null);
     setTool("select");
-    if (object?.mount === "wall") return;
+    if (object?.mount === "wall" || object?.layoutLocked) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pushHistory();
+    const dragIds = selectedObjectIds.includes(objectId) ? selectedObjectIds : [objectId];
+    objectDragRef.current = {
+      pointer: clientToWorld(event.clientX, event.clientY),
+      positions: new Map(objects.filter((item) => dragIds.includes(item.id) && item.mount === "floor" && !item.layoutLocked).map((item) => [item.id, { x: item.x, y: item.y }])),
+    };
     setDraggingObjectId(objectId);
   };
 
@@ -594,6 +621,7 @@ export function useCadState() {
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
   };
 
   const onCanvasPointerUp = () => {
@@ -603,6 +631,7 @@ export function useCadState() {
     setResizingOpening(null);
     setDraggingOpeningId(null);
     wallDragRef.current = null;
+    objectDragRef.current = null;
     openingResizeRef.current = null;
     openingMoveRef.current = null;
   };
@@ -721,6 +750,38 @@ export function useCadState() {
     setObjects((items) => items.map((object) => (object.id === objectId ? { ...object, ...updates } : object)));
   };
 
+  const alignSelectedObjects = (mode) => {
+    if (selectedObjectIds.length < 2) return;
+    pushHistory();
+    setObjects((items) => alignObjects(items, selectedObjectIds, mode));
+  };
+
+  const distributeSelectedObjects = (axis) => {
+    if (selectedObjectIds.length < 3) return;
+    pushHistory();
+    setObjects((items) => distributeObjects(items, selectedObjectIds, axis));
+  };
+
+  const setSelectedObjectsLocked = (locked) => {
+    if (!selectedObjectIds.length) return;
+    pushHistory();
+    const ids = new Set(selectedObjectIds);
+    setObjects((items) => items.map((object) => ids.has(object.id) && object.mount === "floor" ? { ...object, layoutLocked: locked } : object));
+  };
+
+  const getArrangementCandidates = (roomId) => {
+    const room = rooms.find((item) => item.id === roomId);
+    if (!room) return [];
+    return arrangementCandidates({ room, rooms, nodes, walls, openings, objects });
+  };
+
+  const applyArrangement = (updates) => {
+    if (!updates?.length) return;
+    pushHistory();
+    const updateMap = new Map(updates.map((update) => [update.id, update]));
+    setObjects((items) => items.map((object) => updateMap.has(object.id) ? { ...object, ...updateMap.get(object.id) } : object));
+  };
+
   const updateLayer = (layer, updates) => setLayerSettings((settings) => ({ ...settings, [layer]: { ...settings[layer], ...updates } }));
 
   const addElectricalCircuit = () => {
@@ -792,6 +853,7 @@ export function useCadState() {
     setElectricalRoutes((items) => items.filter((route) => route.fromObjectId !== objectId && route.toObjectId !== objectId));
     setPlumbingRoutes((items) => items.filter((route) => route.fromObjectId !== objectId && route.toObjectId !== objectId));
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedRoomId(null);
   };
 
@@ -816,6 +878,7 @@ export function useCadState() {
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setSelectedRoomId(null);
     setPlacementKind(null);
     setTool("select");
@@ -841,6 +904,7 @@ export function useCadState() {
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
     setSelectedObjectId(null);
+    setSelectedObjectIds([]);
     setPlacementKind(null);
     setTool("wall");
   };
@@ -903,6 +967,8 @@ export function useCadState() {
     selectedObject,
     selectedObjectId,
     setSelectedObjectId,
+    selectedObjectIds,
+    setSelectedObjectIds,
     selectedRoom,
     selectedRoomId,
     setSelectedRoomId,
@@ -951,6 +1017,11 @@ export function useCadState() {
     deleteOpening,
     deleteOpenings,
     updateObject,
+    alignSelectedObjects,
+    distributeSelectedObjects,
+    setSelectedObjectsLocked,
+    getArrangementCandidates,
+    applyArrangement,
     deleteObject,
     loadProject,
     clearProject,

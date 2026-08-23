@@ -1,10 +1,17 @@
-import React, { useState } from "react";
-import { Trash2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Lock, LockOpen, Trash2 } from "lucide-react";
 import { CATALOG_GROUPS, OBJECT_CATALOG } from "./catalog";
 
 export default function ObjectPanel({ cad }) {
   const [openGroup, setOpenGroup] = useState("Living");
+  const [arrangeRoomId, setArrangeRoomId] = useState("");
   const selected = cad.selectedObject;
+  const selectedFloorObjects = cad.objects.filter((object) => cad.selectedObjectIds.includes(object.id) && object.mount === "floor");
+  const arrangementOptions = arrangeRoomId ? cad.getArrangementCandidates(Number(arrangeRoomId)) : [];
+
+  useEffect(() => {
+    if (selected?.roomId) setArrangeRoomId(String(selected.roomId));
+  }, [selected?.roomId]);
 
   return (
     <section>
@@ -26,6 +33,23 @@ export default function ObjectPanel({ cad }) {
           {OBJECT_CATALOG[cad.placementKind].mount === "wall" ? "Click a wall to attach it." : "Click the drawing to place it."}
         </div>
       )}
+
+      <div className="mt-3 space-y-2 rounded-lg border border-[#D8CCB0] bg-[#FBF8F1] p-3">
+        <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium">Arrange furniture</p><span className="mono text-[9px] text-[#8A97A3]">{selectedFloorObjects.length} selected</span></div>
+        <p className="text-[10px] leading-4 text-[#5B6B78]">Shift-click furniture to build a selection. Locked items anchor the layout and are never moved.</p>
+        <div className="grid grid-cols-3 gap-1">
+          {[['left', 'Left'], ['centre', 'Centre'], ['right', 'Right'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']].map(([mode, label]) => <button key={mode} disabled={selectedFloorObjects.length < 2} onClick={() => cad.alignSelectedObjects(mode)} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8] disabled:opacity-35">{label}</button>)}
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          <button disabled={selectedFloorObjects.length < 3} onClick={() => cad.distributeSelectedObjects('horizontal')} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8] disabled:opacity-35">Distribute ↔</button>
+          <button disabled={selectedFloorObjects.length < 3} onClick={() => cad.distributeSelectedObjects('vertical')} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8] disabled:opacity-35">Distribute ↕</button>
+        </div>
+        <button disabled={!selectedFloorObjects.length} onClick={() => cad.setSelectedObjectsLocked(!selectedFloorObjects.every((object) => object.layoutLocked))} className="flex w-full items-center justify-center gap-1.5 rounded border border-[#B8863E] py-1.5 text-[10px] text-[#B8863E] disabled:opacity-35">{selectedFloorObjects.every((object) => object.layoutLocked) ? <LockOpen size={12} /> : <Lock size={12} />}{selectedFloorObjects.every((object) => object.layoutLocked) ? 'Unlock selection' : 'Lock selection'}</button>
+        <div className="border-t border-[#E8DFC9] pt-2">
+          <label className="text-[10px] text-[#5B6B78]">Auto-arrange a room<select value={arrangeRoomId} onChange={(event) => setArrangeRoomId(event.target.value)} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-[10px]"><option value="">Choose room…</option>{cad.rooms.filter((room) => room.classification !== 'void').map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}</select></label>
+          {arrangementOptions.length > 0 && <div className="mt-2 grid grid-cols-3 gap-1">{arrangementOptions.map((option) => <button key={option.variant} onClick={() => cad.applyArrangement(option.updates)} title={`${option.warningCount} layout warnings`} className="rounded border px-1 py-1.5 text-[9px]" style={{ borderColor: option.warningCount ? '#E0954A' : '#6FA98C', color: option.warningCount ? '#8B5A24' : '#397257' }}>{option.name}<span className="mono mt-0.5 block text-[8px]">{option.warningCount} issues</span></button>)}</div>}
+        </div>
+      </div>
 
       {selected && (
         <div className="mt-3 space-y-2 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
