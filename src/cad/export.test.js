@@ -51,3 +51,10 @@ test("electrical wiring routes survive project and discipline exports", () => {
   assert.match(buildCadDxf(wired), /ELECTRICAL_WIRING/);
   assert.deepEqual(parseProject(serializeProject(wired)), wired);
 });
+
+test("plumbing services preserve system and diameter in project exports", () => {
+  const piped = { ...project, objects: [{ id: 5, kind: "basin", name: "Basin", category: "Plumbing", mount: "free", x: 20, y: 20 }, { id: 6, kind: "stopcock", name: "Stopcock", category: "Plumbing", mount: "free", x: 80, y: 50 }], plumbingRoutes: [{ id: 7, fromObjectId: 5, toObjectId: 6, system: "cold", diameterMm: 15 }] };
+  assert.match(buildCadSvg(piped), /#2E86C1/i);
+  assert.match(buildCadDxf(piped), /PLUMBING_COLD/);
+  assert.deepEqual(parseProject(serializeProject(piped)), piped);
+});

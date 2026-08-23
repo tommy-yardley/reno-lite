@@ -1,6 +1,7 @@
 import { openingSpan, polygonArea } from "./geometry.js";
 import { OBJECT_CATALOG } from "./catalog.js";
 import { electricalRoutePoints } from "./electrical.js";
+import { PIPE_SYSTEMS, plumbingRoutePoints } from "./plumbing.js";
 
 const xmlEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 
@@ -66,7 +67,12 @@ export function buildCadSvg(project) {
     const circuit = (project.electricalCircuits || []).find((item) => item.id === route.circuitId);
     return points.length > 1 ? `<polyline points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${circuit?.colour || "#d26a3d"}" stroke-width="1.5" stroke-dasharray="5 3"/>` : "";
   }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}"><rect x="${bounds.minX}" y="${bounds.minY}" width="${bounds.width}" height="${bounds.height}" fill="#fff"/>${roomMarkup}${wallMarkup}${openingMarkup}${routeMarkup}${objectMarkup}</svg>`;
+  const plumbingMarkup = !layerVisible(project, "plumbing") ? "" : (project.plumbingRoutes || []).map((route) => {
+    const points = plumbingRoutePoints(route, project.objects, project.walls, nodeMap);
+    const system = PIPE_SYSTEMS[route.system] || PIPE_SYSTEMS.cold;
+    return points.length > 1 ? `<polyline points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${system.colour}" stroke-width="${Math.max(1.5, route.diameterMm / 10)}" ${system.dash ? `stroke-dasharray="${system.dash}"` : ""}/>` : "";
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}"><rect x="${bounds.minX}" y="${bounds.minY}" width="${bounds.width}" height="${bounds.height}" fill="#fff"/>${roomMarkup}${wallMarkup}${openingMarkup}${routeMarkup}${plumbingMarkup}${objectMarkup}</svg>`;
 }
 
 const dxfPair = (code, value) => `${code}\n${value}\n`;
@@ -117,6 +123,12 @@ export function buildCadDxf(project) {
     output += dxfPair(0, "LWPOLYLINE") + dxfPair(8, "ELECTRICAL_WIRING") + dxfPair(90, points.length) + dxfPair(70, 0);
     points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
   });
+  if (layerVisible(project, "plumbing")) (project.plumbingRoutes || []).forEach((route) => {
+    const points = plumbingRoutePoints(route, project.objects, project.walls, nodeMap);
+    if (points.length < 2) return;
+    output += dxfPair(0, "LWPOLYLINE") + dxfPair(8, `PLUMBING_${route.system.toUpperCase()}`) + dxfPair(90, points.length) + dxfPair(70, 0);
+    points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
+  });
   return output + dxfPair(0, "ENDSEC") + dxfPair(0, "EOF");
 }
 
@@ -138,5 +150,6 @@ export function parseProject(text) {
     ...(project.layerSettings ? { layerSettings: project.layerSettings } : {}),
     ...(project.electricalCircuits ? { electricalCircuits: project.electricalCircuits } : {}),
     ...(project.electricalRoutes ? { electricalRoutes: project.electricalRoutes } : {}),
+    ...(project.plumbingRoutes ? { plumbingRoutes: project.plumbingRoutes } : {}),
   };
 }

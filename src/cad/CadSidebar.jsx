@@ -6,6 +6,7 @@ import ObjectPanel from "./ObjectPanel";
 import ExportPanel from "./ExportPanel";
 import LayerPanel from "./LayerPanel";
 import ElectricalPanel from "./ElectricalPanel";
+import PlumbingPanel from "./PlumbingPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -81,6 +82,8 @@ export default function CadSidebar({ cad }) {
       <ObjectPanel cad={cad} />
 
       <ElectricalPanel cad={cad} />
+
+      <PlumbingPanel cad={cad} />
 
       {cad.designWarnings.length > 0 && (
         <section>

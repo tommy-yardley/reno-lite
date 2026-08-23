@@ -58,6 +58,9 @@ keep the agent plan beside the canvas as a visual reference.
 - UK electrical planning includes sockets, FCUs, isolators, alarms, fans, switches,
   dimmers, and lighting. Devices can be assigned to named rated circuits, switches
   linked to lights, and explicit wiring routes exported to SVG and DXF.
+- UK plumbing fixtures include sanitaryware, boiler, cylinder, manifold, stopcock,
+  and soil stack symbols. Hot, cold, waste, and heating routes carry metric pipe
+  diameters and retain distinct colours/layers in SVG and DXF.
 
 ## Legacy implementation retained for migration
 

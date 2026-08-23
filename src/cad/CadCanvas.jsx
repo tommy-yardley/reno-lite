@@ -5,6 +5,7 @@ import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
 import { OBJECT_CATALOG } from "./catalog";
 import { electricalRoutePoints } from "./electrical";
+import { PIPE_SYSTEMS, plumbingRoutePoints } from "./plumbing";
 
 export default function CadCanvas({ cad }) {
   const [view, setView] = useState({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
@@ -18,6 +19,7 @@ export default function CadCanvas({ cad }) {
     openings,
     objects,
     electricalRoutes,
+    plumbingRoutes,
     nodeMap,
     unit,
     tool,
@@ -243,6 +245,13 @@ export default function CadCanvas({ cad }) {
           const circuit = cad.electricalCircuits.find((item) => item.id === route.circuitId);
           if (points.length < 2) return null;
           return <g key={route.id} style={{ ...layerStyle("electrical"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={circuit?.colour || "#D26A3D"} strokeWidth="1.5" strokeDasharray="5 3" /><text x={points[1].x} y={points[1].y - 3} fontSize="6" fill={circuit?.colour || "#D26A3D"} className="mono">{circuit?.name || "WIRE"}</text></g>;
+        })}
+
+        {plumbingRoutes.map((route) => {
+          const points = plumbingRoutePoints(route, objects, walls, nodeMap);
+          const system = PIPE_SYSTEMS[route.system] || PIPE_SYSTEMS.cold;
+          if (points.length < 2) return null;
+          return <g key={route.id} style={{ ...layerStyle("plumbing"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={system.colour} strokeWidth={Math.max(1.5, route.diameterMm / 10)} strokeDasharray={system.dash || undefined} /><text x={points[1].x + 3} y={points[1].y - 3} fontSize="6" fill={system.colour} className="mono">{system.label} Ø{route.diameterMm}</text></g>;
         })}
 
         {objects.map((object) => {
