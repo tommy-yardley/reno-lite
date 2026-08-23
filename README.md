@@ -29,6 +29,10 @@ keep the agent plan beside the canvas as a visual reference.
   room geometry.
 - Sockets, double sockets, switches, radiators, ceiling lights, and pendants use
   plan symbols; wall-mounted objects retain a parametric position on their host.
+- Clean SVG, PNG, and PDF drawing exports exclude the untrusted reference plan.
+- DXF exports real-inch wall/opening geometry, dimensions, and renovation-object
+  labels on separate CAD layers.
+- Editable RenoLite project files can be saved and reopened on another device.
 
 ## Legacy implementation retained for migration
 

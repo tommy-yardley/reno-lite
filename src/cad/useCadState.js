@@ -515,6 +515,25 @@ export function useCadState() {
     setSelectedObjectId(null);
   };
 
+  const loadProject = (project) => {
+    pushHistory();
+    setNodes(project.nodes || []);
+    setWalls(project.walls || []);
+    setRooms(project.rooms || []);
+    setOpenings(project.openings || []);
+    setObjects(project.objects || []);
+    setUnit(project.unit || "metric");
+    setReferenceImage(project.referenceImage || null);
+    const ids = [...(project.nodes || []), ...(project.walls || []), ...(project.rooms || []), ...(project.openings || []), ...(project.objects || [])].map((item) => item.id || 0);
+    nextId.current = Math.max(0, ...ids) + 1;
+    finishWallChain();
+    setSelectedWallId(null);
+    setSelectedOpeningId(null);
+    setSelectedObjectId(null);
+    setPlacementKind(null);
+    setTool("select");
+  };
+
   const handleReferenceUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -580,6 +599,7 @@ export function useCadState() {
     deleteOpening,
     updateObject,
     deleteObject,
+    loadProject,
     isNodeLocked: (nodeId) => nodeIsConstrained(nodeId, walls),
     saveStatus,
     undo,
