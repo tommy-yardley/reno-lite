@@ -45,6 +45,15 @@ export default function ObjectPanel({ cad }) {
               <button onClick={() => cad.updateObject(selected.id, { rotation: (selected.rotation + 15) % 360 })} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Rotate 15°</button>
             </>
           )}
+          <div className="border-t border-[#E8DFC9] pt-2">
+            <p className="mono mb-1.5 text-[9px] uppercase text-[#8A97A3]">Specification</p>
+            <div className="space-y-1.5">
+              <select value={selected.roomId || ""} onChange={(event) => cad.updateObject(selected.id, { roomId: Number(event.target.value) || null })} className="w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1 text-[10px]"><option value="">No room assigned</option>{cad.rooms.filter((room) => room.classification !== "void").map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}</select>
+              <input value={selected.supplier || ""} placeholder="Supplier" onChange={(event) => cad.updateObject(selected.id, { supplier: event.target.value }, false)} className="w-full rounded border border-[#D8CCB0] px-2 py-1 text-[10px]" />
+              <input value={selected.productUrl || ""} placeholder="Product URL" onChange={(event) => cad.updateObject(selected.id, { productUrl: event.target.value }, false)} className="w-full rounded border border-[#D8CCB0] px-2 py-1 text-[10px]" />
+              <div className="grid grid-cols-2 gap-2"><label className="text-[9px] text-[#8A97A3]">Price £<input type="number" step="0.01" value={((selected.pricePence || 0) / 100).toFixed(2)} onChange={(event) => cad.updateObject(selected.id, { pricePence: Math.round(Number(event.target.value) * 100) }, false)} className="mono mt-0.5 w-full rounded border border-[#D8CCB0] px-1 py-1 text-[10px]" /></label><label className="text-[9px] text-[#8A97A3]">Status<select value={selected.procurementStatus || "proposed"} onChange={(event) => cad.updateObject(selected.id, { procurementStatus: event.target.value })} className="mt-0.5 w-full rounded border border-[#D8CCB0] bg-transparent px-1 py-1 text-[10px]">{["existing", "retained", "proposed", "purchased", "installed"].map((status) => <option key={status}>{status}</option>)}</select></label></div>
+            </div>
+          </div>
           <button onClick={() => cad.deleteObject(selected.id)} className="flex w-full items-center justify-center gap-1.5 rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]"><Trash2 size={13} /> Delete object</button>
         </div>
       )}

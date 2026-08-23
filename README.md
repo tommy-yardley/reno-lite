@@ -61,6 +61,9 @@ keep the agent plan beside the canvas as a visual reference.
 - UK plumbing fixtures include sanitaryware, boiler, cylinder, manifold, stopcock,
   and soil stack symbols. Hot, cold, waste, and heating routes carry metric pipe
   diameters and retain distinct colours/layers in SVG and DXF.
+- Placed products and unplaced materials feed a procurement schedule with room,
+  supplier, URL, GBP pricing, quantity, and existing/proposed/purchased/installed
+  status. The shopping list exports as CSV and a contractor-friendly PDF.
 
 ## Legacy implementation retained for migration
 

@@ -7,6 +7,7 @@ import ExportPanel from "./ExportPanel";
 import LayerPanel from "./LayerPanel";
 import ElectricalPanel from "./ElectricalPanel";
 import PlumbingPanel from "./PlumbingPanel";
+import ShoppingPanel from "./ShoppingPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -84,6 +85,8 @@ export default function CadSidebar({ cad }) {
       <ElectricalPanel cad={cad} />
 
       <PlumbingPanel cad={cad} />
+
+      <ShoppingPanel cad={cad} />
 
       {cad.designWarnings.length > 0 && (
         <section>

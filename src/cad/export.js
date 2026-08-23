@@ -151,5 +151,6 @@ export function parseProject(text) {
     ...(project.electricalCircuits ? { electricalCircuits: project.electricalCircuits } : {}),
     ...(project.electricalRoutes ? { electricalRoutes: project.electricalRoutes } : {}),
     ...(project.plumbingRoutes ? { plumbingRoutes: project.plumbingRoutes } : {}),
+    ...(project.shoppingItems ? { shoppingItems: project.shoppingItems } : {}),
   };
 }
