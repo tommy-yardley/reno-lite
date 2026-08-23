@@ -148,7 +148,7 @@ export default function CadCanvas({ cad }) {
           const selected = wall.id === selectedWallId;
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
           return (
-            <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)}>
+            <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
               <line
                 x1={start.x}
@@ -296,7 +296,7 @@ export default function CadCanvas({ cad }) {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="rounded-lg border border-[#D8CCB0] bg-[#FBF8F1]/95 px-5 py-4 text-center shadow-sm">
             <p className="serif font-semibold text-[#1B2B3A]">Draw the measured plan</p>
-            <p className="mt-1 max-w-xs text-xs text-[#5B6B78]">Click to place walls. Enter exact dimensions after selecting a wall.</p>
+            <p className="mt-1 max-w-xs text-xs text-[#5B6B78]">Click to place walls, or type the next exact length while drawing.</p>
           </div>
         </div>
       )}

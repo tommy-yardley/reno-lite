@@ -29,6 +29,19 @@ export function projectToSegment(point, start, end) {
   return { point: projected, t, distance: distance(point, projected) };
 }
 
+export function segmentIntersection(a, b, c, d, epsilon = 1e-7) {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const cross = (left, right) => left.x * right.y - left.y * right.x;
+  const denominator = cross(r, s);
+  if (Math.abs(denominator) <= epsilon) return null;
+  const delta = { x: c.x - a.x, y: c.y - a.y };
+  const t = cross(delta, s) / denominator;
+  const u = cross(delta, r) / denominator;
+  if (t < -epsilon || t > 1 + epsilon || u < -epsilon || u > 1 + epsilon) return null;
+  return { point: { x: a.x + r.x * t, y: a.y + r.y * t }, t, u };
+}
+
 export function wallKey(startNodeId, endNodeId) {
   return startNodeId < endNodeId
     ? `${startNodeId}-${endNodeId}`

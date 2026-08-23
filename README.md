@@ -18,8 +18,12 @@ keep the agent plan beside the canvas as a visual reference.
   the drawing, scale, or geometry.
 - Wall chains snap at 15° increments and can branch from existing wall endpoints or
   from a newly-created anchor in the middle of a wall.
+- Type an exact next-wall length while drawing; the live pointer controls its snapped
+  direction. Crossing walls automatically gain a shared junction.
 - Exact wall length and thickness editing in metric or imperial units.
 - Wall locking protects both endpoints from direct or connected edits.
+- Unconnected unlocked walls can be repositioned as a rigid segment without changing
+  their length or angle.
 - Anchors only appear while drawing or when their wall is selected.
 - Local persistence plus undo/redo.
 - Closing a wall chain creates a named, typed room with live floor area.
