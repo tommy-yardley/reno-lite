@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { distance, nodeIsConstrained, polygonArea, projectToSegment, snapAngle, validateCadGraph, wallKey } from "./geometry";
+import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
 
@@ -37,6 +37,7 @@ export function useCadState() {
   const [pointer, setPointer] = useState(null);
   const [draggingNodeId, setDraggingNodeId] = useState(null);
   const [draggingObjectId, setDraggingObjectId] = useState(null);
+  const [draggingWallId, setDraggingWallId] = useState(null);
   const [angleSnap, setAngleSnap] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const nextId = useRef(
@@ -46,6 +47,7 @@ export function useCadState() {
   const fileInputRef = useRef(null);
   const undoStack = useRef([]);
   const redoStack = useRef([]);
+  const wallDragRef = useRef(null);
 
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const selectedWall = walls.find((wall) => wall.id === selectedWallId) || null;
@@ -112,6 +114,7 @@ export function useCadState() {
         finishWallChain();
         setDraggingNodeId(null);
         setDraggingObjectId(null);
+        setDraggingWallId(null);
         setPlacementKind(null);
         setTool("select");
       }
@@ -245,6 +248,36 @@ export function useCadState() {
     let targetNode = resolved.node;
 
     pushHistory();
+    const splitWall = (wall, junction, splitT) => {
+      const firstWall = { ...wall, id: nextId.current++, endNodeId: junction.id };
+      const secondWall = { ...wall, id: nextId.current++, startNodeId: junction.id };
+      nextWalls = nextWalls.filter((item) => item.id !== wall.id);
+      nextWalls.push(firstWall, secondWall);
+      nextRooms = nextRooms.map((room) => {
+        if (!room.wallIds.includes(wall.id)) return room;
+        const wallIndex = room.wallIds.indexOf(wall.id);
+        const wallIds = [...room.wallIds];
+        wallIds.splice(wallIndex, 1, firstWall.id, secondWall.id);
+        const nodeIds = [...room.nodeIds];
+        const startIndex = nodeIds.findIndex((id, index) => {
+          const nextNodeId = nodeIds[(index + 1) % nodeIds.length];
+          return (id === wall.startNodeId && nextNodeId === wall.endNodeId) || (id === wall.endNodeId && nextNodeId === wall.startNodeId);
+        });
+        if (startIndex >= 0) nodeIds.splice(startIndex + 1, 0, junction.id);
+        return { ...room, wallIds, nodeIds };
+      });
+      nextOpenings = nextOpenings.map((opening) => {
+        if (opening.wallId !== wall.id) return opening;
+        if (opening.t <= splitT) return { ...opening, wallId: firstWall.id, t: opening.t / splitT };
+        return { ...opening, wallId: secondWall.id, t: (opening.t - splitT) / (1 - splitT) };
+      });
+      nextObjects = nextObjects.map((object) => {
+        if (object.wallId !== wall.id) return object;
+        if (object.t <= splitT) return { ...object, wallId: firstWall.id, t: object.t / splitT };
+        return { ...object, wallId: secondWall.id, t: (object.t - splitT) / (1 - splitT) };
+      });
+    };
+
     if (!targetNode && resolved.wallHit) {
       const { wall, projection } = resolved.wallHit;
       if (projection.t < 0.001) targetNode = nodeMap.get(wall.startNodeId);
@@ -252,33 +285,7 @@ export function useCadState() {
       else {
         targetNode = { id: nextId.current++, ...projection.point };
         nextNodes.push(targetNode);
-        const firstWall = { ...wall, id: nextId.current++, endNodeId: targetNode.id };
-        const secondWall = { ...wall, id: nextId.current++, startNodeId: targetNode.id };
-        nextWalls = nextWalls.filter((item) => item.id !== wall.id);
-        nextWalls.push(firstWall, secondWall);
-        nextRooms = nextRooms.map((room) => {
-          if (!room.wallIds.includes(wall.id)) return room;
-          const wallIndex = room.wallIds.indexOf(wall.id);
-          const wallIds = [...room.wallIds];
-          wallIds.splice(wallIndex, 1, firstWall.id, secondWall.id);
-          const nodeIds = [...room.nodeIds];
-          const startIndex = nodeIds.findIndex((id, index) => {
-            const nextIdInRoom = nodeIds[(index + 1) % nodeIds.length];
-            return (id === wall.startNodeId && nextIdInRoom === wall.endNodeId) || (id === wall.endNodeId && nextIdInRoom === wall.startNodeId);
-          });
-          if (startIndex >= 0) nodeIds.splice(startIndex + 1, 0, targetNode.id);
-          return { ...room, wallIds, nodeIds };
-        });
-        nextOpenings = nextOpenings.map((opening) => {
-          if (opening.wallId !== wall.id) return opening;
-          if (opening.t <= projection.t) return { ...opening, wallId: firstWall.id, t: opening.t / projection.t };
-          return { ...opening, wallId: secondWall.id, t: (opening.t - projection.t) / (1 - projection.t) };
-        });
-        nextObjects = nextObjects.map((object) => {
-          if (object.wallId !== wall.id) return object;
-          if (object.t <= projection.t) return { ...object, wallId: firstWall.id, t: object.t / projection.t };
-          return { ...object, wallId: secondWall.id, t: (object.t - projection.t) / (1 - projection.t) };
-        });
+        splitWall(wall, targetNode, projection.t);
       }
     }
     if (!targetNode) {
@@ -286,51 +293,69 @@ export function useCadState() {
       nextNodes.push(targetNode);
     }
 
-    let addedWallId = null;
+    const junctions = [];
     if (activeNodeId != null && activeNodeId !== targetNode.id) {
-      const key = wallKey(activeNodeId, targetNode.id);
-      const duplicate = nextWalls.find((wall) => wallKey(wall.startNodeId, wall.endNodeId) === key);
-      if (duplicate) addedWallId = duplicate.id;
-      else {
-        addedWallId = nextId.current++;
-        nextWalls.push({
-          id: addedWallId,
-          startNodeId: activeNodeId,
-          endNodeId: targetNode.id,
-          thicknessInches: DEFAULT_WALL_THICKNESS_IN,
-          locked: false,
-        });
-      }
+      const segmentStart = nextNodes.find((node) => node.id === activeNodeId);
+      const candidates = [...nextWalls];
+      candidates.forEach((wall) => {
+        if ([wall.startNodeId, wall.endNodeId].includes(activeNodeId) || [wall.startNodeId, wall.endNodeId].includes(targetNode.id)) return;
+        const wallStart = nextNodes.find((node) => node.id === wall.startNodeId);
+        const wallEnd = nextNodes.find((node) => node.id === wall.endNodeId);
+        if (!segmentStart || !wallStart || !wallEnd) return;
+        const hit = segmentIntersection(segmentStart, targetNode, wallStart, wallEnd);
+        if (!hit || hit.t <= 0.001 || hit.t >= 0.999 || hit.u <= 0.001 || hit.u >= 0.999) return;
+        let junction = junctions.find((item) => distance(item, hit.point) < 0.01);
+        if (!junction) {
+          junction = { id: nextId.current++, ...hit.point, segmentT: hit.t };
+          junctions.push(junction);
+          nextNodes.push({ id: junction.id, x: junction.x, y: junction.y });
+        }
+        splitWall(wall, junction, hit.u);
+      });
     }
 
-    setNodes(nextNodes);
-    setWalls(nextWalls);
-    setRooms(nextRooms);
-    setOpenings(nextOpenings);
-    setObjects(nextObjects);
+    junctions.sort((left, right) => left.segmentT - right.segmentT);
+    const segmentNodeIds = activeNodeId == null ? [] : [activeNodeId, ...junctions.map((junction) => junction.id), targetNode.id];
+    const addedWallIds = [];
+    for (let index = 0; index < segmentNodeIds.length - 1; index += 1) {
+      const startNodeId = segmentNodeIds[index];
+      const endNodeId = segmentNodeIds[index + 1];
+      const key = wallKey(startNodeId, endNodeId);
+      const duplicate = nextWalls.find((wall) => wallKey(wall.startNodeId, wall.endNodeId) === key);
+      if (duplicate) addedWallIds.push(duplicate.id);
+      else {
+        const wallId = nextId.current++;
+        nextWalls.push({ id: wallId, startNodeId, endNodeId, thicknessInches: DEFAULT_WALL_THICKNESS_IN, locked: false });
+        addedWallIds.push(wallId);
+      }
+    }
 
     const closingRoom =
       chainNodeIds.length >= 3 &&
       targetNode.id === chainNodeIds[0] &&
       activeNodeId !== targetNode.id;
     if (closingRoom) {
-      setRooms((items) => [
-        ...items,
-        {
-          id: nextId.current++,
-          name: `Room ${items.length + 1}`,
-          type: "Room",
-          nodeIds: chainNodeIds,
-          wallIds: [...chainWallIds, addedWallId].filter(Boolean),
-          color: "#B9D8C2",
-        },
-      ]);
+      nextRooms.push({ id: nextId.current++, name: `Room ${nextRooms.length + 1}`, type: "Room", nodeIds: [...chainNodeIds, ...junctions.map((junction) => junction.id)], wallIds: [...chainWallIds, ...addedWallIds], color: "#B9D8C2" });
       finishWallChain();
     } else {
       setActiveNodeId(targetNode.id);
-      setChainNodeIds((ids) => (ids.length ? [...ids, targetNode.id] : [targetNode.id]));
-      if (addedWallId) setChainWallIds((ids) => [...ids, addedWallId]);
+      setChainNodeIds((ids) => (ids.length ? [...ids, ...junctions.map((junction) => junction.id), targetNode.id] : [targetNode.id]));
+      if (addedWallIds.length) setChainWallIds((ids) => [...ids, ...addedWallIds]);
     }
+    setNodes(nextNodes);
+    setWalls(nextWalls);
+    setRooms(nextRooms);
+    setOpenings(nextOpenings);
+    setObjects(nextObjects);
+  };
+
+  const addWallAtLength = (inches) => {
+    if (activeNodeId == null || !Number.isFinite(inches) || inches <= 0) return;
+    const anchor = nodeMap.get(activeNodeId);
+    if (!anchor) return;
+    const guide = pointer || { x: anchor.x + inches, y: anchor.y };
+    const guideLength = distance(anchor, guide) || 1;
+    addWallPoint({ x: anchor.x + ((guide.x - anchor.x) / guideLength) * inches, y: anchor.y + ((guide.y - anchor.y) / guideLength) * inches });
   };
 
   const addOpening = (wallId, rawPoint, type) => {
@@ -378,6 +403,16 @@ export function useCadState() {
     if (draggingObjectId != null) {
       setObjects((items) => items.map((object) => (object.id === draggingObjectId ? { ...object, x: point.x, y: point.y } : object)));
     }
+    if (draggingWallId != null && wallDragRef.current) {
+      const dx = rawPoint.x - wallDragRef.current.pointer.x;
+      const dy = rawPoint.y - wallDragRef.current.pointer.y;
+      const { start, end } = wallDragRef.current;
+      setNodes((items) => items.map((node) => {
+        if (node.id === start.id) return { ...node, x: start.x + dx, y: start.y + dy };
+        if (node.id === end.id) return { ...node, x: end.x + dx, y: end.y + dy };
+        return node;
+      }));
+    }
   };
 
   const onNodePointerDown = (nodeId) => (event) => {
@@ -416,6 +451,17 @@ export function useCadState() {
     }
     setSelectedWallId(wallId);
     setSelectedOpeningId(null);
+    setSelectedObjectId(null);
+    const wall = walls.find((item) => item.id === wallId);
+    const start = wall && nodeMap.get(wall.startNodeId);
+    const end = wall && nodeMap.get(wall.endNodeId);
+    const canMove = wall && !wall.locked && start && end && !nodeIsConstrained(start.id, walls, wall.id) && !nodeIsConstrained(end.id, walls, wall.id);
+    if (canMove) {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      pushHistory();
+      wallDragRef.current = { pointer: clientToWorld(event.clientX, event.clientY), start: { ...start }, end: { ...end } };
+      setDraggingWallId(wallId);
+    }
   };
 
   const onOpeningPointerDown = (openingId) => (event) => {
@@ -441,6 +487,8 @@ export function useCadState() {
   const onCanvasPointerUp = () => {
     setDraggingNodeId(null);
     setDraggingObjectId(null);
+    setDraggingWallId(null);
+    wallDragRef.current = null;
   };
 
   const toggleWallLock = (wallId) => {
@@ -601,6 +649,7 @@ export function useCadState() {
     activeNodeId,
     setActiveNodeId,
     finishWallChain,
+    addWallAtLength,
     selectedWall,
     selectedWallId,
     setSelectedWallId,
