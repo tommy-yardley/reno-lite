@@ -91,17 +91,22 @@ export default function CadSidebar({ cad }) {
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Selected {cad.selectedOpening.type}</h2>
           <div className="space-y-2 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
-            <label className="block text-[11px] text-[#5B6B78]">Width ({unit === "metric" ? "m" : "ft"})</label>
+            <p className="text-[10px] leading-4 text-[#5B6B78]">Drag either blue handle on the drawing, or enter an exact width below.</p>
+            <label className="block text-[11px] text-[#5B6B78]">Exact width ({unit === "metric" ? "mm" : "ft"})</label>
             <input
               value={openingWidthInput}
-              placeholder={unit === "metric" ? (cad.selectedOpening.widthInches / 39.3700787).toFixed(2) : (cad.selectedOpening.widthInches / 12).toFixed(2)}
+              placeholder={unit === "metric" ? (cad.selectedOpening.widthInches * 25.4).toFixed(0) : (cad.selectedOpening.widthInches / 12).toFixed(2)}
               onChange={(event) => setOpeningWidthInput(event.target.value)}
               onBlur={() => {
-                const widthInches = parseLengthInput(openingWidthInput, unit);
+                const widthInches = unit === "metric" ? Number(openingWidthInput) / 25.4 : parseLengthInput(openingWidthInput, unit);
                 if (widthInches) cad.updateOpening(cad.selectedOpening.id, { widthInches });
               }}
+              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
               className="mono w-full rounded border border-[#D8CCB0] px-2 py-1.5 text-sm"
             />
+            <div className="grid grid-cols-3 gap-1">
+              {(cad.selectedOpening.type === "window" ? [600, 900, 1200] : [762, 826, 926]).map((millimetres) => <button key={millimetres} onClick={() => cad.updateOpening(cad.selectedOpening.id, { widthInches: millimetres / 25.4 })} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8]">{millimetres} mm</button>)}
+            </div>
             {cad.selectedOpening.type === "door" && (
               <button onClick={() => cad.updateOpening(cad.selectedOpening.id, { swing: cad.selectedOpening.swing * -1 })} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip door swing</button>
             )}
@@ -159,14 +164,14 @@ export default function CadSidebar({ cad }) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] text-[#5B6B78]">Thickness ({unit === "metric" ? "cm" : "in"})</label>
+              <label className="mb-1 block text-[11px] text-[#5B6B78]">Thickness ({unit === "metric" ? "mm" : "in"})</label>
               <input
                 value={thicknessInput}
-                placeholder={unit === "metric" ? (selectedWall.thicknessInches * 2.54).toFixed(1) : selectedWall.thicknessInches.toFixed(1)}
+                placeholder={unit === "metric" ? (selectedWall.thicknessInches * 25.4).toFixed(0) : selectedWall.thicknessInches.toFixed(1)}
                 onChange={(event) => setThicknessInput(event.target.value)}
                 onBlur={() => {
                   const value = Number(thicknessInput);
-                  cad.setWallThickness(selectedWall.id, unit === "metric" ? value / 2.54 : value);
+                  cad.setWallThickness(selectedWall.id, unit === "metric" ? value / 25.4 : value);
                 }}
                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                 className="mono w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-sm"

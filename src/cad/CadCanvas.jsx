@@ -30,6 +30,7 @@ export default function CadCanvas({ cad }) {
     onNodePointerDown,
     onWallPointerDown,
     onOpeningPointerDown,
+    onOpeningResizePointerDown,
     onObjectPointerDown,
     isNodeLocked,
   } = cad;
@@ -200,6 +201,11 @@ export default function CadCanvas({ cad }) {
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke={selected ? "#2F78C4" : "#5E86A8"} strokeWidth="3" />
                 <line x1={span.start.x + normal.x * 4} y1={span.start.y + normal.y * 4} x2={span.end.x + normal.x * 4} y2={span.end.y + normal.y * 4} stroke="#5E86A8" strokeWidth="1" />
+                {selected && <>
+                  <circle cx={span.start.x} cy={span.start.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "start")} style={{ cursor: "ew-resize" }} />
+                  <circle cx={span.end.x} cy={span.end.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "end")} style={{ cursor: "ew-resize" }} />
+                  <text x={(span.start.x + span.end.x) / 2} y={(span.start.y + span.end.y) / 2 - 10} textAnchor="middle" fontSize="7" fill="#2F78C4" className="mono" style={{ pointerEvents: "none" }}>{lengthToDisplay(opening.widthInches, unit, unit === "imperial")}</text>
+                </>}
               </g>
             );
           }
@@ -211,6 +217,11 @@ export default function CadCanvas({ cad }) {
               <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
               <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
               <path d={`M ${span.end.x} ${span.end.y} A ${span.width} ${span.width} 0 0 ${sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
+              {selected && <>
+                <circle cx={span.start.x} cy={span.start.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "start")} style={{ cursor: "ew-resize" }} />
+                <circle cx={span.end.x} cy={span.end.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "end")} style={{ cursor: "ew-resize" }} />
+                <text x={(span.start.x + span.end.x) / 2} y={(span.start.y + span.end.y) / 2 - 10} textAnchor="middle" fontSize="7" fill="#2F78C4" className="mono" style={{ pointerEvents: "none" }}>{lengthToDisplay(opening.widthInches, unit, unit === "imperial")}</text>
+              </>}
             </g>
           );
         })}
@@ -273,6 +284,13 @@ export default function CadCanvas({ cad }) {
             );
           })}
       </svg>
+
+      <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm">
+        {tool === "wall" && (activeNodeId == null ? "Wall tool · click an anchor to begin" : "Drawing wall · click to place, or enter an exact length")}
+        {tool === "select" && (selectedOpeningId != null ? "Opening selected · drag blue handles to resize" : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : "Select tool · click an item to edit or drag it")}
+        {(tool === "door" || tool === "window") && `Place ${tool} · click a wall`}
+        {tool === "object" && "Placement tool · click the drawing or a host wall"}
+      </div>
 
       <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-[#D8CCB0] bg-[#FBF8F1] shadow-sm">
         <button onClick={() => setPanMode((value) => !value)} className="border-r border-[#D8CCB0] p-2" style={{ color: panMode ? "#B8863E" : "#5E86A8" }} title="Pan"><Hand size={14} /></button>
