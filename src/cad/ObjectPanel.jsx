@@ -39,8 +39,8 @@ export default function ObjectPanel({ cad }) {
           {selected.mount === "floor" && (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[10px] text-[#5B6B78]">Width (in)<input type="number" value={selected.widthInches} onChange={(event) => cad.updateObject(selected.id, { widthInches: Number(event.target.value) }, false)} className="mono mt-1 w-full rounded border border-[#D8CCB0] px-1 py-1" /></label>
-                <label className="text-[10px] text-[#5B6B78]">Depth (in)<input type="number" value={selected.depthInches} onChange={(event) => cad.updateObject(selected.id, { depthInches: Number(event.target.value) }, false)} className="mono mt-1 w-full rounded border border-[#D8CCB0] px-1 py-1" /></label>
+                <label className="text-[10px] text-[#5B6B78]">Width (mm)<input type="number" value={Math.round(selected.widthInches * 25.4)} onChange={(event) => cad.updateObject(selected.id, { widthInches: Number(event.target.value) / 25.4 }, false)} className="mono mt-1 w-full rounded border border-[#D8CCB0] px-1 py-1" /></label>
+                <label className="text-[10px] text-[#5B6B78]">Depth (mm)<input type="number" value={Math.round(selected.depthInches * 25.4)} onChange={(event) => cad.updateObject(selected.id, { depthInches: Number(event.target.value) / 25.4 }, false)} className="mono mt-1 w-full rounded border border-[#D8CCB0] px-1 py-1" /></label>
               </div>
               <button onClick={() => cad.updateObject(selected.id, { rotation: (selected.rotation + 15) % 360 })} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Rotate 15°</button>
             </>
