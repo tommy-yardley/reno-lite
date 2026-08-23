@@ -33,6 +33,7 @@ export function useCadState() {
   const [selectedWallId, setSelectedWallId] = useState(null);
   const [selectedOpeningId, setSelectedOpeningId] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [placementKind, setPlacementKind] = useState(null);
   const [pointer, setPointer] = useState(null);
   const [draggingNodeId, setDraggingNodeId] = useState(null);
@@ -55,8 +56,13 @@ export function useCadState() {
   const selectedWall = walls.find((wall) => wall.id === selectedWallId) || null;
   const selectedOpening = openings.find((opening) => opening.id === selectedOpeningId) || null;
   const selectedObject = objects.find((object) => object.id === selectedObjectId) || null;
+  const selectedRoom = rooms.find((room) => room.id === selectedRoomId) || null;
   const roomAreas = useMemo(
-    () => rooms.map((room) => ({ ...room, areaSqInches: polygonArea(room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)) })),
+    () => rooms.map((room) => {
+      const grossAreaSqInches = polygonArea(room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean));
+      const voidAreaSqInches = room.classification === "void" ? 0 : rooms.filter((candidate) => candidate.classification === "void" && candidate.hostRoomId === room.id).reduce((sum, candidate) => sum + polygonArea(candidate.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)), 0);
+      return { ...room, grossAreaSqInches, voidAreaSqInches, areaSqInches: room.classification === "void" ? grossAreaSqInches : Math.max(0, grossAreaSqInches - voidAreaSqInches) };
+    }),
     [nodeMap, rooms]
   );
   const drawingWarnings = useMemo(() => validateCadGraph({ nodes, walls, rooms, openings, objects }), [nodes, walls, rooms, openings, objects]);
@@ -339,7 +345,7 @@ export function useCadState() {
       targetNode.id === chainNodeIds[0] &&
       activeNodeId !== targetNode.id;
     if (closingRoom) {
-      nextRooms.push({ id: nextId.current++, name: `Room ${nextRooms.length + 1}`, type: "Room", nodeIds: [...chainNodeIds, ...junctions.map((junction) => junction.id)], wallIds: [...chainWallIds, ...addedWallIds], color: "#B9D8C2" });
+      nextRooms.push({ id: nextId.current++, name: `Room ${nextRooms.length + 1}`, type: "Room", classification: "room", nodeIds: [...chainNodeIds, ...junctions.map((junction) => junction.id)], wallIds: [...chainWallIds, ...addedWallIds], color: "#B9D8C2" });
       finishWallChain();
     } else {
       setActiveNodeId(targetNode.id);
@@ -391,6 +397,7 @@ export function useCadState() {
       setSelectedWallId(null);
       setSelectedOpeningId(null);
       setSelectedObjectId(null);
+      setSelectedRoomId(null);
     }
   };
 
@@ -465,6 +472,7 @@ export function useCadState() {
     setSelectedWallId(wallId);
     setSelectedOpeningId(null);
     setSelectedObjectId(null);
+    setSelectedRoomId(null);
     const wall = walls.find((item) => item.id === wallId);
     const start = wall && nodeMap.get(wall.startNodeId);
     const end = wall && nodeMap.get(wall.endNodeId);
@@ -481,6 +489,7 @@ export function useCadState() {
     event.stopPropagation();
     setSelectedOpeningId(openingId);
     setSelectedWallId(null);
+    setSelectedRoomId(null);
     setTool("select");
   };
 
@@ -498,6 +507,7 @@ export function useCadState() {
     setSelectedOpeningId(openingId);
     setSelectedWallId(null);
     setSelectedObjectId(null);
+    setSelectedRoomId(null);
     openingResizeRef.current = { openingId, handle, wallLength, fixedT: handle === "start" ? opening.t + halfT : opening.t - halfT, start: { ...start }, end: { ...end } };
     setResizingOpening({ openingId, handle });
   };
@@ -508,11 +518,21 @@ export function useCadState() {
     setSelectedObjectId(objectId);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedRoomId(null);
     setTool("select");
     if (object?.mount === "wall") return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pushHistory();
     setDraggingObjectId(objectId);
+  };
+
+  const onRoomPointerDown = (roomId) => (event) => {
+    if (tool !== "select") return;
+    event.stopPropagation();
+    setSelectedRoomId(roomId);
+    setSelectedWallId(null);
+    setSelectedOpeningId(null);
+    setSelectedObjectId(null);
   };
 
   const onCanvasPointerUp = () => {
@@ -575,12 +595,15 @@ export function useCadState() {
   };
 
   const updateRoom = (roomId, updates) => {
+    pushHistory();
     setRooms((items) => items.map((room) => (room.id === roomId ? { ...room, ...updates } : room)));
   };
 
   const deleteRoom = (roomId) => {
     pushHistory();
     setRooms((items) => items.filter((room) => room.id !== roomId));
+    setRooms((items) => items.map((room) => room.hostRoomId === roomId ? { ...room, hostRoomId: null } : room));
+    setSelectedRoomId(null);
   };
 
   const updateOpening = (openingId, updates) => {
@@ -606,6 +629,7 @@ export function useCadState() {
     pushHistory();
     setObjects((items) => items.filter((object) => object.id !== objectId));
     setSelectedObjectId(null);
+    setSelectedRoomId(null);
   };
 
   const loadProject = (project) => {
@@ -623,6 +647,7 @@ export function useCadState() {
     setSelectedWallId(null);
     setSelectedOpeningId(null);
     setSelectedObjectId(null);
+    setSelectedRoomId(null);
     setPlacementKind(null);
     setTool("select");
   };
@@ -694,6 +719,9 @@ export function useCadState() {
     selectedObject,
     selectedObjectId,
     setSelectedObjectId,
+    selectedRoom,
+    selectedRoomId,
+    setSelectedRoomId,
     placementKind,
     setPlacementKind,
     beginObjectPlacement,
@@ -711,6 +739,7 @@ export function useCadState() {
     onOpeningPointerDown,
     onOpeningResizePointerDown,
     onObjectPointerDown,
+    onRoomPointerDown,
     toggleWallLock,
     setWallLength,
     setWallThickness,

@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { CATALOG_GROUPS, OBJECT_CATALOG } from "./catalog";
 
 export default function ObjectPanel({ cad }) {
-  const [openGroup, setOpenGroup] = useState("Furniture");
+  const [openGroup, setOpenGroup] = useState("Living");
   const selected = cad.selectedObject;
 
   return (

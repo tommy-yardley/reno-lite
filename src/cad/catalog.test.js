@@ -15,3 +15,8 @@ test("floor furniture has positive physical dimensions", () => {
       assert.ok(item.depthInches > 0, item.label);
     });
 });
+
+test("UK furniture presets retain their nominal metric dimensions", () => {
+  assert.deepEqual(OBJECT_CATALOG.doubleBed.standardMm, { width: 1350, depth: 1900 });
+  assert.deepEqual(OBJECT_CATALOG.baseCabinet.standardMm, { width: 600, depth: 600 });
+});

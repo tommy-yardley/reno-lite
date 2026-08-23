@@ -87,7 +87,8 @@ export function polygonsIntersect(left, right) {
 
 export function validateDesignLayout({ nodes, walls, rooms, openings, objects }) {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const roomPolygons = rooms.map((room) => room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)).filter((points) => points.length >= 3);
+  const roomPolygons = rooms.filter((room) => room.classification !== "void").map((room) => room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)).filter((points) => points.length >= 3);
+  const voidPolygons = rooms.filter((room) => room.classification === "void").map((room) => room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)).filter((points) => points.length >= 3);
   const furniture = objects.filter((object) => object.mount === "floor");
   const footprints = new Map(furniture.map((object) => [object.id, objectFootprint(object)]));
   const warnings = [];
@@ -96,7 +97,7 @@ export function validateDesignLayout({ nodes, walls, rooms, openings, objects })
   if (roomPolygons.length) {
     furniture.forEach((object) => {
       const footprint = footprints.get(object.id);
-      if (!roomPolygons.some((polygon) => footprint.every((point) => pointInPolygon(point, polygon)))) {
+      if (!roomPolygons.some((polygon) => footprint.every((point) => pointInPolygon(point, polygon))) || voidPolygons.some((polygon) => footprint.some((point) => pointInPolygon(point, polygon)))) {
         warnings.push(`${object.name} is outside a room boundary.`);
         objectIds.add(object.id);
       }
@@ -198,6 +199,7 @@ export function validateCadGraph({ nodes, walls, rooms = [], openings = [], obje
   });
   rooms.forEach((room) => {
     if (room.nodeIds.some((id) => !nodeIds.has(id)) || room.wallIds.some((id) => !wallIds.has(id))) warnings.push(`${room.name} has an incomplete boundary`);
+    if (room.classification === "void" && !rooms.some((candidate) => candidate.id === room.hostRoomId && candidate.classification !== "void")) warnings.push(`${room.name} is not assigned to a host room`);
   });
   openings.forEach((opening) => {
     if (!wallIds.has(opening.wallId)) warnings.push(`${opening.type} ${opening.id} has no host wall`);
