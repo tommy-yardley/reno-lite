@@ -34,9 +34,18 @@ export const OBJECT_CATALOG = {
   socket: { label: "13A socket", category: "Electrical", mount: "wall", symbol: "S" },
   doubleSocket: { label: "13A double socket", category: "Electrical", mount: "wall", symbol: "SS" },
   lightSwitch: { label: "Light switch", category: "Electrical", mount: "wall", symbol: "SW" },
+  dimmer: { label: "Dimmer switch", category: "Electrical", mount: "wall", symbol: "DIM" },
+  fusedSpur: { label: "Fused connection unit", category: "Electrical", mount: "wall", symbol: "FCU" },
+  cookerSwitch: { label: "Cooker control unit", category: "Electrical", mount: "wall", symbol: "CCU" },
+  isolator: { label: "Isolator", category: "Electrical", mount: "wall", symbol: "ISO" },
+  smokeAlarm: { label: "Smoke alarm", category: "Electrical", mount: "free", symbol: "SD" },
+  heatAlarm: { label: "Heat alarm", category: "Electrical", mount: "free", symbol: "HD" },
+  extractorFan: { label: "Extractor fan", category: "Electrical", mount: "wall", symbol: "EF" },
   radiator: { label: "Radiator", category: "Heating", mount: "wall", symbol: "R", widthInches: mm(1000), standardMm: { width: 1000 } },
   ceilingLight: { label: "Ceiling light", category: "Lighting", mount: "free", symbol: "L" },
   pendant: { label: "Pendant light", category: "Lighting", mount: "free", symbol: "P" },
+  downlight: { label: "Recessed downlight", category: "Lighting", mount: "free", symbol: "DL" },
+  wallLight: { label: "Wall light", category: "Lighting", mount: "wall", symbol: "WL" },
 };
 
 export const CATALOG_GROUPS = ["Living", "Dining", "Bedroom", "Office", "Kitchen", "Utility", "Storage", "Electrical", "Lighting", "Heating"];

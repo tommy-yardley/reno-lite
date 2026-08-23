@@ -37,3 +37,17 @@ test("room and void geometry remains explicit in drawing exports", () => {
   assert.match(buildCadDxf(spacedProject), /VOIDS/);
   assert.match(buildCadDxf(spacedProject), /ROOMS/);
 });
+
+test("hidden layers are omitted from clean SVG and DXF exports", () => {
+  const hidden = { ...project, layerSettings: { architecture: { visible: true }, electrical: { visible: false } } };
+  assert.doesNotMatch(buildCadSvg(hidden), />S<\/text>/);
+  assert.doesNotMatch(buildCadDxf(hidden), /ELECTRICAL/);
+  assert.deepEqual(parseProject(serializeProject(hidden)), hidden);
+});
+
+test("electrical wiring routes survive project and discipline exports", () => {
+  const wired = { ...project, objects: [{ id: 5, kind: "ceilingLight", name: "Light", category: "Lighting", mount: "free", x: 20, y: 20 }, { id: 6, kind: "lightSwitch", name: "Switch", category: "Electrical", mount: "free", x: 80, y: 50 }], electricalCircuits: [{ id: 7, name: "Lighting", colour: "#ff0000" }], electricalRoutes: [{ id: 8, fromObjectId: 5, toObjectId: 6, circuitId: 7 }] };
+  assert.match(buildCadSvg(wired), /#ff0000/);
+  assert.match(buildCadDxf(wired), /ELECTRICAL_WIRING/);
+  assert.deepEqual(parseProject(serializeProject(wired)), wired);
+});
