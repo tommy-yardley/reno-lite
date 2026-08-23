@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, Redo2, Ruler, Undo2, X } from "lucide-react";
 import CadCanvas from "./cad/CadCanvas";
 import CadSidebar from "./cad/CadSidebar";
@@ -15,6 +15,13 @@ const SAVE_LABEL = {
 export default function App() {
   const cad = useCadState();
   const [referenceOpen, setReferenceOpen] = useState(false);
+
+  // Deleting the final wall removes its nodes as well. If the wall tool was in
+  // the middle of a chain, its active node can otherwise point at a node that no
+  // longer exists, causing the next wall to be created from a stale anchor.
+  useEffect(() => {
+    if (cad.activeNodeId != null && !cad.nodeMap.has(cad.activeNodeId)) cad.finishWallChain();
+  }, [cad.activeNodeId, cad.nodeMap, cad.finishWallChain]);
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-[linear-gradient(180deg,#F3EEE3_0%,#ECE4D2_100%)] text-[#1B2B3A]" style={{ fontFamily: "'IBM Plex Sans', ui-sans-serif, system-ui" }}>
