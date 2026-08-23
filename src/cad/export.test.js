@@ -37,3 +37,10 @@ test("room and void geometry remains explicit in drawing exports", () => {
   assert.match(buildCadDxf(spacedProject), /VOIDS/);
   assert.match(buildCadDxf(spacedProject), /ROOMS/);
 });
+
+test("hidden layers are omitted from clean SVG and DXF exports", () => {
+  const hidden = { ...project, layerSettings: { architecture: { visible: true }, electrical: { visible: false } } };
+  assert.doesNotMatch(buildCadSvg(hidden), />S<\/text>/);
+  assert.doesNotMatch(buildCadDxf(hidden), /ELECTRICAL/);
+  assert.deepEqual(parseProject(serializeProject(hidden)), hidden);
+});

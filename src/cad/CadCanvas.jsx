@@ -37,6 +37,11 @@ export default function CadCanvas({ cad }) {
     onRoomPointerDown,
     isNodeLocked,
   } = cad;
+  const layerStyle = (layer) => ({
+    display: cad.layerSettings[layer].visible ? undefined : "none",
+    opacity: cad.activeLayer && cad.activeLayer !== layer ? 0.18 : 1,
+    pointerEvents: cad.layerSettings[layer].locked ? "none" : undefined,
+  });
 
   const visibleNodeIds = new Set();
   if (tool === "wall") nodes.forEach((node) => visibleNodeIds.add(node.id));
@@ -135,7 +140,7 @@ export default function CadCanvas({ cad }) {
             y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
           };
           return (
-            <g key={room.id}>
+            <g key={room.id} style={layerStyle("architecture")}>
               <polygon onPointerDown={onRoomPointerDown(room.id)} points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill={room.classification === "void" ? "#A8A8A2" : room.color || "#B9D8C2"} fillOpacity={room.classification === "void" ? "0.5" : "0.34"} stroke={room.id === selectedRoomId ? "#2F78C4" : room.classification === "void" ? "#777770" : "none"} strokeWidth={room.id === selectedRoomId ? "2" : "1"} strokeDasharray={room.classification === "void" ? "5 3" : undefined} style={{ cursor: tool === "select" ? "pointer" : "default" }} />
               <text x={center.x} y={center.y - 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="#1B2B3A" className="serif" style={{ pointerEvents: "none" }}>{room.name}</text>
               <text x={center.x} y={center.y + 10} textAnchor="middle" fontSize="7" fill="#5B6B78" className="mono">
@@ -152,7 +157,7 @@ export default function CadCanvas({ cad }) {
           const selected = wall.id === selectedWallId;
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
           return (
-            <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
+            <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ ...layerStyle("architecture"), cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
               <line
                 x1={start.x}
@@ -164,7 +169,7 @@ export default function CadCanvas({ cad }) {
                 strokeLinecap="square"
                 style={{ pointerEvents: "none" }}
               />
-              {(selected || tool === "wall") && (
+              {cad.layerSettings.dimensions.visible && (selected || tool === "wall") && (
                 <g style={{ pointerEvents: "none" }}>
                   <rect x={midpoint.x - 25} y={midpoint.y - 10} width="50" height="16" rx="3" fill="#FBF8F1" opacity="0.92" />
                   <text x={midpoint.x} y={midpoint.y + 2} textAnchor="middle" fontSize="8" fill="#5B6B78" className="mono">
@@ -186,7 +191,7 @@ export default function CadCanvas({ cad }) {
             stroke="#B8863E"
             strokeWidth="2"
             strokeDasharray="6 4"
-            style={{ pointerEvents: "none" }}
+            style={{ ...layerStyle("architecture"), pointerEvents: "none" }}
           />
         )}
 
@@ -200,7 +205,7 @@ export default function CadCanvas({ cad }) {
           const selected = selectedOpeningIds.includes(opening.id);
           if (opening.type === "window") {
             return (
-              <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
+              <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke={selected ? "#2F78C4" : "#5E86A8"} strokeWidth="3" />
                 <line x1={span.start.x + normal.x * 4} y1={span.start.y + normal.y * 4} x2={span.end.x + normal.x * 4} y2={span.end.y + normal.y * 4} stroke="#5E86A8" strokeWidth="1" />
@@ -218,7 +223,7 @@ export default function CadCanvas({ cad }) {
           const leafEnd = { x: hinge.x + leafDirection.x * span.width * opening.swing, y: hinge.y + leafDirection.y * span.width * opening.swing };
           const sweep = opening.swing > 0 ? 1 : 0;
           return (
-            <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
+            <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
               <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
               <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
               <path d={`M ${closedEnd.x} ${closedEnd.y} A ${span.width} ${span.width} 0 0 ${opening.hingeSide === "end" ? 1 - sweep : sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
@@ -235,6 +240,7 @@ export default function CadCanvas({ cad }) {
           const preset = OBJECT_CATALOG[object.kind] || {};
           const selected = object.id === selectedObjectId;
           const warning = cad.warningObjectIds.includes(object.id);
+          const objectLayer = object.category === "Electrical" || object.category === "Lighting" ? "electrical" : object.category === "Plumbing" ? "plumbing" : "furniture";
           if (object.mount === "wall") {
             const wall = walls.find((item) => item.id === object.wallId);
             const start = wall && nodeMap.get(wall.startNodeId);
@@ -244,7 +250,7 @@ export default function CadCanvas({ cad }) {
             const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
             const width = object.kind === "radiator" ? object.widthInches : 16;
             return (
-              <g key={object.id} transform={`translate(${center.x} ${center.y}) rotate(${angle})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "pointer" }}>
+              <g key={object.id} transform={`translate(${center.x} ${center.y}) rotate(${angle})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "pointer" }}>
                 <rect x={-width / 2} y="-8" width={width} height="16" rx="2" fill="#FBF8F1" stroke={selected ? "#2F78C4" : object.category === "Electrical" ? "#D26A3D" : "#8A6D4B"} strokeWidth={selected ? 2 : 1.5} />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="6" fontWeight="600" fill="#1B2B3A" className="mono">{preset.symbol}</text>
               </g>
@@ -252,7 +258,7 @@ export default function CadCanvas({ cad }) {
           }
           if (object.mount === "floor") {
             return (
-              <g key={object.id} transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "move" }}>
+              <g key={object.id} transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
                 {(selected || warning) && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke={warning ? "#B2483A" : "#2F78C4"} strokeWidth="2" strokeDasharray="4 3" />}
                 <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill={warning ? "#E8B7AE" : "#D7C7A7"} fillOpacity="0.82" stroke={warning ? "#B2483A" : "#7A6F5C"} strokeWidth="1.5" />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="7" fill="#1B2B3A" className="mono" style={{ pointerEvents: "none" }}>{object.name}</text>
@@ -260,7 +266,7 @@ export default function CadCanvas({ cad }) {
             );
           }
           return (
-            <g key={object.id} transform={`translate(${object.x} ${object.y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "move" }}>
+            <g key={object.id} transform={`translate(${object.x} ${object.y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
               <circle r={selected ? 11 : 9} fill="#FBF8F1" stroke={selected ? "#2F78C4" : "#D4A72C"} strokeWidth="2" />
               <line x1="-6" y1="0" x2="6" y2="0" stroke="#D4A72C" strokeWidth="1.5" />
               <line x1="0" y1="-6" x2="0" y2="6" stroke="#D4A72C" strokeWidth="1.5" />
@@ -284,7 +290,7 @@ export default function CadCanvas({ cad }) {
                 stroke={active ? "#1B2B3A" : "#B8863E"}
                 strokeWidth="1.5"
                 onPointerDown={onNodePointerDown(node.id)}
-                style={{ cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }}
+                style={{ ...layerStyle("architecture"), cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }}
               />
             );
           })}

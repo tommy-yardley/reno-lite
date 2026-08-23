@@ -13,6 +13,8 @@ function boundsFor(project) {
   return { minX, minY, width: Math.max(72, maxX - minX), height: Math.max(72, maxY - minY) };
 }
 
+const layerVisible = (project, layer) => project.layerSettings?.[layer]?.visible !== false;
+
 export function buildCadSvg(project) {
   const nodeMap = new Map(project.nodes.map((node) => [node.id, node]));
   const bounds = boundsFor(project);
@@ -21,19 +23,19 @@ export function buildCadSvg(project) {
     const excluded = project.rooms.filter((candidate) => candidate.classification === "void" && candidate.hostRoomId === room.id).reduce((sum, candidate) => sum + polygonArea(candidate.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean)), 0);
     return [room.id, room.classification === "void" ? gross : Math.max(0, gross - excluded)];
   }));
-  const roomMarkup = project.rooms.map((room) => {
+  const roomMarkup = !layerVisible(project, "architecture") ? "" : project.rooms.map((room) => {
     const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
     if (points.length < 3) return "";
     const center = { x: points.reduce((sum, point) => sum + point.x, 0) / points.length, y: points.reduce((sum, point) => sum + point.y, 0) / points.length };
     const area = areaByRoom.get(room.id) || 0;
     return `<g><polygon points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="${room.classification === "void" ? "#a8a8a2" : room.color || "#dcebdc"}" fill-opacity="${room.classification === "void" ? "0.5" : "0.28"}" ${room.classification === "void" ? 'stroke="#777" stroke-dasharray="5 3"' : ""}/><text x="${center.x}" y="${center.y}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#1b2b3a">${xmlEscape(room.classification === "void" ? `${room.name} · VOID` : room.name)}</text><text x="${center.x}" y="${center.y + 12}" text-anchor="middle" font-family="monospace" font-size="7" fill="#5b6b78">${(area / (39.3700787 ** 2)).toFixed(1)} m²</text></g>`;
   }).join("");
-  const wallMarkup = project.walls.map((wall) => {
+  const wallMarkup = !layerVisible(project, "architecture") ? "" : project.walls.map((wall) => {
     const start = nodeMap.get(wall.startNodeId);
     const end = nodeMap.get(wall.endNodeId);
     return start && end ? `<line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="#17242f" stroke-width="${wall.thicknessInches}" stroke-linecap="square"/>` : "";
   }).join("");
-  const openingMarkup = project.openings.map((opening) => {
+  const openingMarkup = !layerVisible(project, "architecture") ? "" : project.openings.map((opening) => {
     const wall = project.walls.find((item) => item.id === opening.wallId);
     const start = wall && nodeMap.get(wall.startNodeId);
     const end = wall && nodeMap.get(wall.endNodeId);
@@ -44,6 +46,8 @@ export function buildCadSvg(project) {
   }).join("");
   const objectMarkup = project.objects.map((object) => {
     const preset = OBJECT_CATALOG[object.kind] || {};
+    const layer = object.category === "Electrical" || object.category === "Lighting" ? "electrical" : object.category === "Plumbing" ? "plumbing" : "furniture";
+    if (!layerVisible(project, layer)) return "";
     if (object.mount === "wall") {
       const wall = project.walls.find((item) => item.id === object.wallId);
       const start = wall && nodeMap.get(wall.startNodeId);
@@ -64,13 +68,13 @@ const dxfPair = (code, value) => `${code}\n${value}\n`;
 export function buildCadDxf(project) {
   const nodeMap = new Map(project.nodes.map((node) => [node.id, node]));
   let output = dxfPair(0, "SECTION") + dxfPair(2, "HEADER") + dxfPair(9, "$INSUNITS") + dxfPair(70, 1) + dxfPair(0, "ENDSEC") + dxfPair(0, "SECTION") + dxfPair(2, "ENTITIES");
-  project.rooms.forEach((room) => {
+  if (layerVisible(project, "architecture")) project.rooms.forEach((room) => {
     const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
     if (points.length < 3) return;
     output += dxfPair(0, "LWPOLYLINE") + dxfPair(8, room.classification === "void" ? "VOIDS" : "ROOMS") + dxfPair(90, points.length) + dxfPair(70, 1);
     points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
   });
-  project.walls.forEach((wall) => {
+  if (layerVisible(project, "architecture")) project.walls.forEach((wall) => {
     const start = nodeMap.get(wall.startNodeId);
     const end = nodeMap.get(wall.endNodeId);
     if (!start || !end) return;
@@ -78,7 +82,7 @@ export function buildCadDxf(project) {
     const length = Math.hypot(end.x - start.x, end.y - start.y);
     output += dxfPair(0, "TEXT") + dxfPair(8, "DIMENSIONS") + dxfPair(10, (start.x + end.x) / 2) + dxfPair(20, -(start.y + end.y) / 2) + dxfPair(40, 5) + dxfPair(1, `${length.toFixed(2)} in`);
   });
-  project.openings.forEach((opening) => {
+  if (layerVisible(project, "architecture")) project.openings.forEach((opening) => {
     const wall = project.walls.find((item) => item.id === opening.wallId);
     const start = wall && nodeMap.get(wall.startNodeId);
     const end = wall && nodeMap.get(wall.endNodeId);
@@ -87,6 +91,8 @@ export function buildCadDxf(project) {
     output += dxfPair(0, "LINE") + dxfPair(8, opening.type === "door" ? "DOORS" : "WINDOWS") + dxfPair(10, span.start.x) + dxfPair(20, -span.start.y) + dxfPair(11, span.end.x) + dxfPair(21, -span.end.y);
   });
   project.objects.forEach((object) => {
+    const objectLayer = object.category === "Electrical" || object.category === "Lighting" ? "electrical" : object.category === "Plumbing" ? "plumbing" : "furniture";
+    if (!layerVisible(project, objectLayer)) return;
     let x = object.x;
     let y = object.y;
     if (object.mount === "wall") {
@@ -117,5 +123,6 @@ export function parseProject(text) {
     objects: project.objects || [],
     unit: project.unit || "metric",
     referenceImage: project.referenceImage || null,
+    ...(project.layerSettings ? { layerSettings: project.layerSettings } : {}),
   };
 }
