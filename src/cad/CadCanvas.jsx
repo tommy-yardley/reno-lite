@@ -1,11 +1,14 @@
-import React from "react";
-import { Lock } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import { Hand, Lock, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { distance, openingSpan, polygonArea } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
 import { OBJECT_CATALOG } from "./catalog";
 
 export default function CadCanvas({ cad }) {
+  const [view, setView] = useState({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
+  const [panMode, setPanMode] = useState(false);
+  const panStart = useRef(null);
   const {
     svgRef,
     nodes,
@@ -39,19 +42,74 @@ export default function CadCanvas({ cad }) {
     visibleNodeIds.add(selectedWall.endNodeId);
   }
 
+  const previewMeasurement = useMemo(() => {
+    const anchor = activeNodeId != null ? nodeMap.get(activeNodeId) : null;
+    if (!anchor || !pointer) return null;
+    const dx = pointer.x - anchor.x;
+    const dy = pointer.y - anchor.y;
+    const angle = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+    return { length: distance(anchor, pointer), angle };
+  }, [activeNodeId, nodeMap, pointer]);
+
+  const fitPlan = () => {
+    if (!nodes.length) {
+      setView({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
+      return;
+    }
+    const padding = 48;
+    const minX = Math.min(...nodes.map((node) => node.x)) - padding;
+    const minY = Math.min(...nodes.map((node) => node.y)) - padding;
+    const maxX = Math.max(...nodes.map((node) => node.x)) + padding;
+    const maxY = Math.max(...nodes.map((node) => node.y)) + padding;
+    setView({ x: minX, y: minY, width: Math.max(120, maxX - minX), height: Math.max(80, maxY - minY) });
+  };
+
+  const zoom = (factor) => setView((current) => {
+    const width = Math.max(72, Math.min(WORKSPACE.width * 3, current.width * factor));
+    const height = Math.max(48, Math.min(WORKSPACE.height * 3, current.height * factor));
+    return { x: current.x + (current.width - width) / 2, y: current.y + (current.height - height) / 2, width, height };
+  });
+
+  const handlePointerDown = (event) => {
+    if (panMode || event.button === 1) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      panStart.current = { clientX: event.clientX, clientY: event.clientY, view };
+      return;
+    }
+    onCanvasPointerDown(event);
+  };
+
+  const handlePointerMove = (event) => {
+    if (panStart.current) {
+      const rect = cad.svgRef.current.getBoundingClientRect();
+      const dx = ((event.clientX - panStart.current.clientX) / rect.width) * panStart.current.view.width;
+      const dy = ((event.clientY - panStart.current.clientY) / rect.height) * panStart.current.view.height;
+      setView({ ...panStart.current.view, x: panStart.current.view.x - dx, y: panStart.current.view.y - dy });
+      return;
+    }
+    onCanvasPointerMove(event);
+  };
+
+  const handlePointerUp = () => {
+    panStart.current = null;
+    onCanvasPointerUp();
+  };
+
   return (
     <div className="relative min-h-[500px] h-[68vh] lg:h-[calc(100vh-170px)] overflow-hidden rounded-xl border border-[#D8CCB0] bg-[#FBF8F1] shadow-sm">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${WORKSPACE.width} ${WORKSPACE.height}`}
+        viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        onPointerDown={onCanvasPointerDown}
-        onPointerMove={onCanvasPointerMove}
-        onPointerUp={onCanvasPointerUp}
-        onPointerCancel={onCanvasPointerUp}
-        style={{ touchAction: "none", userSelect: "none", cursor: tool === "wall" ? "crosshair" : "default" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onWheel={(event) => { event.preventDefault(); zoom(event.deltaY > 0 ? 1.12 : 0.88); }}
+        style={{ touchAction: "none", userSelect: "none", cursor: panMode ? "grab" : tool === "wall" ? "crosshair" : "default" }}
         aria-label="CAD drawing canvas"
       >
         <defs>
@@ -214,6 +272,25 @@ export default function CadCanvas({ cad }) {
             );
           })}
       </svg>
+
+      <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-[#D8CCB0] bg-[#FBF8F1] shadow-sm">
+        <button onClick={() => setPanMode((value) => !value)} className="border-r border-[#D8CCB0] p-2" style={{ color: panMode ? "#B8863E" : "#5E86A8" }} title="Pan"><Hand size={14} /></button>
+        <button onClick={() => zoom(0.8)} className="border-r border-[#D8CCB0] p-2 text-[#5E86A8]" title="Zoom in"><ZoomIn size={14} /></button>
+        <button onClick={() => zoom(1.25)} className="border-r border-[#D8CCB0] p-2 text-[#5E86A8]" title="Zoom out"><ZoomOut size={14} /></button>
+        <button onClick={fitPlan} className="p-2 text-[#5E86A8]" title="Fit plan"><Maximize2 size={14} /></button>
+      </div>
+
+      {previewMeasurement && (
+        <div className="mono absolute bottom-3 left-3 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-2 py-1 text-[10px] text-[#5B6B78] shadow-sm">
+          {lengthToDisplay(previewMeasurement.length, unit, unit === "imperial")} · {previewMeasurement.angle.toFixed(0)}°
+        </div>
+      )}
+
+      {cad.drawingWarnings.length > 0 && (
+        <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">
+          {cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}
+        </div>
+      )}
 
       {walls.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

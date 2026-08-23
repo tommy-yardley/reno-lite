@@ -97,6 +97,7 @@ export default function ExportPanel({ cad }) {
       <button onClick={() => run("project", exportProject)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#B8863E] py-1.5 text-xs text-[#B8863E]"><Download size={12} /> Save editable project</button>
       <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importProject} />
       <button onClick={() => importRef.current?.click()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]"><Upload size={12} /> Open project file</button>
+      <button onClick={() => { if (window.confirm("Start a new project? The current drawing can still be restored with Undo until this page is closed.")) cad.clearProject(); }} className="mt-2 w-full rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]">Start new project</button>
       <p className="mt-2 text-[10px] leading-4 text-[#8A97A3]">Drawing exports never include the reference image. Project files retain it so editing can continue on another device.</p>
       {error && <p className="mt-2 text-[10px] text-[#B2483A]">{error}</p>}
     </section>
