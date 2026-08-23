@@ -22,6 +22,7 @@ export default function CadCanvas({ cad }) {
     activeNodeId,
     selectedWallId,
     selectedOpeningId,
+    selectedOpeningIds,
     selectedObjectId,
     selectedRoomId,
     pointer,
@@ -196,7 +197,7 @@ export default function CadCanvas({ cad }) {
           if (!wall || !start || !end) return null;
           const span = openingSpan(start, end, opening.t, opening.widthInches);
           const normal = { x: -span.direction.y, y: span.direction.x };
-          const selected = opening.id === selectedOpeningId;
+          const selected = selectedOpeningIds.includes(opening.id);
           if (opening.type === "window") {
             return (
               <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
@@ -211,14 +212,16 @@ export default function CadCanvas({ cad }) {
               </g>
             );
           }
-          const hinge = span.start;
-          const leafEnd = { x: hinge.x + normal.x * span.width * opening.swing, y: hinge.y + normal.y * span.width * opening.swing };
+          const hinge = opening.hingeSide === "end" ? span.end : span.start;
+          const closedEnd = opening.hingeSide === "end" ? span.start : span.end;
+          const leafDirection = opening.hingeSide === "end" ? { x: -normal.x, y: -normal.y } : normal;
+          const leafEnd = { x: hinge.x + leafDirection.x * span.width * opening.swing, y: hinge.y + leafDirection.y * span.width * opening.swing };
           const sweep = opening.swing > 0 ? 1 : 0;
           return (
             <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ cursor: "pointer" }}>
               <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
               <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
-              <path d={`M ${span.end.x} ${span.end.y} A ${span.width} ${span.width} 0 0 ${sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
+              <path d={`M ${closedEnd.x} ${closedEnd.y} A ${span.width} ${span.width} 0 0 ${opening.hingeSide === "end" ? 1 - sweep : sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
               {selected && <>
                 <circle cx={span.start.x} cy={span.start.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "start")} style={{ cursor: "ew-resize" }} />
                 <circle cx={span.end.x} cy={span.end.y} r="5" fill="#FBF8F1" stroke="#2F78C4" strokeWidth="2" onPointerDown={onOpeningResizePointerDown(opening.id, "end")} style={{ cursor: "ew-resize" }} />
@@ -289,7 +292,7 @@ export default function CadCanvas({ cad }) {
 
       <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm">
         {tool === "wall" && (activeNodeId == null ? "Wall tool · click an anchor to begin" : "Drawing wall · click to place, or enter an exact length")}
-        {tool === "select" && (selectedOpeningId != null ? "Opening selected · drag blue handles to resize" : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : selectedRoomId != null ? "Space selected · name it or mark it as a room or void" : "Select tool · click an item or enclosed space to edit it")}
+        {tool === "select" && (selectedOpeningId != null ? `${selectedOpeningIds.length} opening${selectedOpeningIds.length === 1 ? "" : "s"} selected · drag to move, handles resize, Shift-click adds` : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : selectedRoomId != null ? "Space selected · name it or mark it as a room or void" : "Select tool · click an item or enclosed space to edit it")}
         {(tool === "door" || tool === "window") && `Place ${tool} · click a wall`}
         {tool === "object" && "Placement tool · click the drawing or a host wall"}
       </div>

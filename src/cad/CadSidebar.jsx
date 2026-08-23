@@ -89,9 +89,10 @@ export default function CadSidebar({ cad }) {
 
       {cad.selectedOpening && (
         <section>
-          <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Selected {cad.selectedOpening.type}</h2>
+          <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">{cad.selectedOpeningIds.length} selected {cad.selectedOpeningIds.length === 1 ? cad.selectedOpening.type : "openings"}</h2>
           <div className="space-y-2 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
-            <p className="text-[10px] leading-4 text-[#5B6B78]">Drag either blue handle on the drawing, or enter an exact width below.</p>
+            <p className="text-[10px] leading-4 text-[#5B6B78]">Drag an opening to move it. Drag blue handles to resize. Shift-click adds to the selection.</p>
+            <button onClick={() => cad.setSelectedOpeningIds(cad.openings.filter((opening) => opening.type === cad.selectedOpening.type).map((opening) => opening.id))} className="w-full rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8]">Select all {cad.selectedOpening.type}s</button>
             <label className="block text-[11px] text-[#5B6B78]">Exact width ({unit === "metric" ? "mm" : "ft"})</label>
             <input
               value={openingWidthInput}
@@ -99,18 +100,29 @@ export default function CadSidebar({ cad }) {
               onChange={(event) => setOpeningWidthInput(event.target.value)}
               onBlur={() => {
                 const widthInches = unit === "metric" ? Number(openingWidthInput) / 25.4 : parseLengthInput(openingWidthInput, unit);
-                if (widthInches) cad.updateOpening(cad.selectedOpening.id, { widthInches });
+                if (widthInches) cad.updateOpenings(cad.selectedOpeningIds, { widthInches });
               }}
               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
               className="mono w-full rounded border border-[#D8CCB0] px-2 py-1.5 text-sm"
             />
             <div className="grid grid-cols-3 gap-1">
-              {(cad.selectedOpening.type === "window" ? [600, 900, 1200] : [762, 826, 926]).map((millimetres) => <button key={millimetres} onClick={() => cad.updateOpening(cad.selectedOpening.id, { widthInches: millimetres / 25.4 })} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8]">{millimetres} mm</button>)}
+              {(cad.selectedOpening.type === "window" ? [600, 900, 1200] : [762, 826, 926]).map((millimetres) => <button key={millimetres} onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { widthInches: millimetres / 25.4 })} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8]">{millimetres} mm</button>)}
             </div>
+            {cad.selectedOpeningIds.length === 1 && <label className="block text-[10px] text-[#5B6B78]">Opening type<select value={cad.selectedOpening.variant || (cad.selectedOpening.type === "door" ? "standard" : "casement")} onChange={(event) => cad.updateOpening(cad.selectedOpening.id, { variant: event.target.value })} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-xs">{(cad.selectedOpening.type === "door" ? [["standard", "Standard hinged"], ["double", "Double / French"], ["sliding", "Sliding"], ["cased", "Cased opening"]] : [["casement", "Casement"], ["fixed", "Fixed"], ["sash", "Sash"], ["bay", "Bay"]]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
             {cad.selectedOpening.type === "door" && (
-              <button onClick={() => cad.updateOpening(cad.selectedOpening.id, { swing: cad.selectedOpening.swing * -1 })} className="w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip door swing</button>
+              <div className="grid grid-cols-2 gap-2"><button onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { swing: cad.selectedOpening.swing * -1 })} className="rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip swing</button><button onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { hingeSide: cad.selectedOpening.hingeSide === "end" ? "start" : "end" })} className="rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip hinge</button></div>
             )}
-            <button onClick={() => cad.deleteOpening(cad.selectedOpening.id)} className="flex w-full items-center justify-center gap-1.5 rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]"><Trash2 size={13} /> Delete</button>
+            <button onClick={() => cad.duplicateOpenings(cad.selectedOpeningIds)} className="w-full rounded border border-[#B8863E] py-1.5 text-xs text-[#B8863E]">Duplicate along wall</button>
+            <button onClick={() => cad.deleteOpenings(cad.selectedOpeningIds)} className="flex w-full items-center justify-center gap-1.5 rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]"><Trash2 size={13} /> Delete selected</button>
+          </div>
+        </section>
+      )}
+
+      {cad.openings.length > 0 && (
+        <section>
+          <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Opening schedule</h2>
+          <div className="overflow-hidden rounded-lg border border-[#D8CCB0] bg-[#FBF8F1]">
+            {cad.openings.map((opening, index) => <button key={opening.id} onClick={() => { cad.setSelectedOpeningId(opening.id); cad.setSelectedOpeningIds([opening.id]); }} className="grid w-full grid-cols-[28px_1fr_auto] gap-2 border-b border-[#E8DFC9] px-2 py-1.5 text-left text-[10px] last:border-b-0"><span className="mono text-[#8A97A3]">{String(index + 1).padStart(2, "0")}</span><span className="capitalize text-[#5B6B78]">{opening.variant || opening.type}</span><span className="mono text-[#1B2B3A]">{Math.round(opening.widthInches * 25.4)} mm</span></button>)}
           </div>
         </section>
       )}

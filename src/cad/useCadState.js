@@ -32,6 +32,7 @@ export function useCadState() {
   const [chainWallIds, setChainWallIds] = useState([]);
   const [selectedWallId, setSelectedWallId] = useState(null);
   const [selectedOpeningId, setSelectedOpeningId] = useState(null);
+  const [selectedOpeningIds, setSelectedOpeningIds] = useState([]);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [placementKind, setPlacementKind] = useState(null);
@@ -40,6 +41,7 @@ export function useCadState() {
   const [draggingObjectId, setDraggingObjectId] = useState(null);
   const [draggingWallId, setDraggingWallId] = useState(null);
   const [resizingOpening, setResizingOpening] = useState(null);
+  const [draggingOpeningId, setDraggingOpeningId] = useState(null);
   const [angleSnap, setAngleSnap] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
   const nextId = useRef(
@@ -51,6 +53,7 @@ export function useCadState() {
   const redoStack = useRef([]);
   const wallDragRef = useRef(null);
   const openingResizeRef = useRef(null);
+  const openingMoveRef = useRef(null);
 
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const selectedWall = walls.find((wall) => wall.id === selectedWallId) || null;
@@ -125,6 +128,8 @@ export function useCadState() {
         setDraggingObjectId(null);
         setDraggingWallId(null);
         setResizingOpening(null);
+        setDraggingOpeningId(null);
+        openingMoveRef.current = null;
         setPlacementKind(null);
         setTool("select");
       }
@@ -137,7 +142,7 @@ export function useCadState() {
       if (!editingField && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
         if (selectedObjectId != null) deleteObject(selectedObjectId);
-        else if (selectedOpeningId != null) deleteOpening(selectedOpeningId);
+        else if (selectedOpeningIds.length) deleteOpenings(selectedOpeningIds);
         else if (selectedWallId != null) deleteSelectedWall();
       }
     };
@@ -222,6 +227,7 @@ export function useCadState() {
     setSelectedObjectId(null);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
   };
 
   const createObject = (point, wallId = null, t = null) => {
@@ -380,11 +386,14 @@ export function useCadState() {
       wallId,
       type,
       t: Math.max(0.08, Math.min(0.92, projection.t)),
-      widthInches: type === "door" ? 32 : 36,
+      widthInches: type === "door" ? 826 / 25.4 : 1200 / 25.4,
       swing: 1,
+      hingeSide: "start",
+      variant: type === "door" ? "standard" : "casement",
     };
     setOpenings((items) => [...items, opening]);
     setSelectedOpeningId(opening.id);
+    setSelectedOpeningIds([opening.id]);
     setTool("select");
   };
 
@@ -396,6 +405,7 @@ export function useCadState() {
     else {
       setSelectedWallId(null);
       setSelectedOpeningId(null);
+      setSelectedOpeningIds([]);
       setSelectedObjectId(null);
       setSelectedRoomId(null);
     }
@@ -432,6 +442,11 @@ export function useCadState() {
       const low = Math.max(0, Math.min(fixedT, movingT));
       const high = Math.min(1, Math.max(fixedT, movingT));
       setOpenings((items) => items.map((opening) => opening.id === openingId ? { ...opening, t: (low + high) / 2, widthInches: (high - low) * wallLength } : opening));
+    }
+    if (draggingOpeningId != null && openingMoveRef.current) {
+      const { start, end, halfT } = openingMoveRef.current;
+      const t = projectToSegment(rawPoint, start, end).t;
+      setOpenings((items) => items.map((opening) => opening.id === draggingOpeningId ? { ...opening, t: Math.max(halfT, Math.min(1 - halfT, t)) } : opening));
     }
   };
 
@@ -471,6 +486,7 @@ export function useCadState() {
     }
     setSelectedWallId(wallId);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
     setSelectedObjectId(null);
     setSelectedRoomId(null);
     const wall = walls.find((item) => item.id === wallId);
@@ -487,10 +503,27 @@ export function useCadState() {
 
   const onOpeningPointerDown = (openingId) => (event) => {
     event.stopPropagation();
+    const opening = openings.find((item) => item.id === openingId);
+    if (event.shiftKey) {
+      setSelectedOpeningIds((ids) => ids.includes(openingId) ? ids.filter((id) => id !== openingId) : [...ids, openingId]);
+      setSelectedOpeningId(openingId);
+      return;
+    }
     setSelectedOpeningId(openingId);
+    setSelectedOpeningIds([openingId]);
     setSelectedWallId(null);
     setSelectedRoomId(null);
     setTool("select");
+    const wall = opening && walls.find((item) => item.id === opening.wallId);
+    const start = wall && nodeMap.get(wall.startNodeId);
+    const end = wall && nodeMap.get(wall.endNodeId);
+    if (opening && start && end) {
+      const wallLength = distance(start, end);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      pushHistory();
+      openingMoveRef.current = { start: { ...start }, end: { ...end }, halfT: opening.widthInches / wallLength / 2 };
+      setDraggingOpeningId(openingId);
+    }
   };
 
   const onOpeningResizePointerDown = (openingId, handle) => (event) => {
@@ -505,6 +538,7 @@ export function useCadState() {
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pushHistory();
     setSelectedOpeningId(openingId);
+    setSelectedOpeningIds([openingId]);
     setSelectedWallId(null);
     setSelectedObjectId(null);
     setSelectedRoomId(null);
@@ -518,6 +552,7 @@ export function useCadState() {
     setSelectedObjectId(objectId);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
     setSelectedRoomId(null);
     setTool("select");
     if (object?.mount === "wall") return;
@@ -532,6 +567,7 @@ export function useCadState() {
     setSelectedRoomId(roomId);
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
     setSelectedObjectId(null);
   };
 
@@ -540,8 +576,10 @@ export function useCadState() {
     setDraggingObjectId(null);
     setDraggingWallId(null);
     setResizingOpening(null);
+    setDraggingOpeningId(null);
     wallDragRef.current = null;
     openingResizeRef.current = null;
+    openingMoveRef.current = null;
   };
 
   const toggleWallLock = (wallId) => {
@@ -612,10 +650,43 @@ export function useCadState() {
     setOpenings((items) => items.map((opening) => (opening.id === openingId ? { ...opening, ...updates } : opening)));
   };
 
+  const updateOpenings = (openingIds, updates) => {
+    if (!openingIds.length) return;
+    if (updates.widthInches != null && (!Number.isFinite(updates.widthInches) || updates.widthInches <= 0)) return;
+    pushHistory();
+    const selected = new Set(openingIds);
+    setOpenings((items) => items.map((opening) => selected.has(opening.id) ? { ...opening, ...updates } : opening));
+  };
+
+  const duplicateOpenings = (openingIds) => {
+    if (!openingIds.length) return;
+    pushHistory();
+    const copies = openings.filter((opening) => openingIds.includes(opening.id)).map((opening) => {
+      const wall = walls.find((item) => item.id === opening.wallId);
+      const start = wall && nodeMap.get(wall.startNodeId);
+      const end = wall && nodeMap.get(wall.endNodeId);
+      const wallLength = start && end ? distance(start, end) : 1;
+      return { ...opening, id: nextId.current++, t: Math.min(0.95, opening.t + opening.widthInches / wallLength + 0.03) };
+    });
+    setOpenings((items) => [...items, ...copies]);
+    setSelectedOpeningIds(copies.map((copy) => copy.id));
+    setSelectedOpeningId(copies.at(-1)?.id || null);
+  };
+
   const deleteOpening = (openingId) => {
     pushHistory();
     setOpenings((items) => items.filter((opening) => opening.id !== openingId));
     setSelectedOpeningId(null);
+    setSelectedOpeningIds((ids) => ids.filter((id) => id !== openingId));
+  };
+
+  const deleteOpenings = (openingIds) => {
+    if (!openingIds.length) return;
+    pushHistory();
+    const selected = new Set(openingIds);
+    setOpenings((items) => items.filter((opening) => !selected.has(opening.id)));
+    setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
   };
 
   const updateObject = (objectId, updates, recordHistory = true) => {
@@ -646,6 +717,7 @@ export function useCadState() {
     finishWallChain();
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
     setSelectedObjectId(null);
     setSelectedRoomId(null);
     setPlacementKind(null);
@@ -664,6 +736,7 @@ export function useCadState() {
     finishWallChain();
     setSelectedWallId(null);
     setSelectedOpeningId(null);
+    setSelectedOpeningIds([]);
     setSelectedObjectId(null);
     setPlacementKind(null);
     setTool("wall");
@@ -716,6 +789,8 @@ export function useCadState() {
     selectedOpening,
     selectedOpeningId,
     setSelectedOpeningId,
+    selectedOpeningIds,
+    setSelectedOpeningIds,
     selectedObject,
     selectedObjectId,
     setSelectedObjectId,
@@ -747,7 +822,10 @@ export function useCadState() {
     updateRoom,
     deleteRoom,
     updateOpening,
+    updateOpenings,
+    duplicateOpenings,
     deleteOpening,
+    deleteOpenings,
     updateObject,
     deleteObject,
     loadProject,
