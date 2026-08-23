@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Hand, Lock, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { distance, openingSpan, polygonArea } from "./geometry";
+import { distance, openingSpan, polygonArea, snapAngle } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
 import { OBJECT_CATALOG } from "./catalog";
@@ -11,6 +11,9 @@ export default function CadCanvas({ cad }) {
   const [view, setView] = useState({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
   const [panMode, setPanMode] = useState(false);
   const panStart = useRef(null);
+  const touchPointers = useRef(new Map());
+  const pinchStart = useRef(null);
+  const draggingNodeRef = useRef(null);
   const {
     svgRef,
     nodes,
@@ -83,7 +86,48 @@ export default function CadCanvas({ cad }) {
     return { x: current.x + (current.width - width) / 2, y: current.y + (current.height - height) / 2, width, height };
   });
 
+  const clientToWorld = (clientX, clientY) => {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM?.();
+    if (!svg || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    const world = point.matrixTransform(matrix.inverse());
+    return { x: world.x, y: world.y };
+  };
+
+  const worldToClient = (point) => {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM?.();
+    if (!svg || !matrix) return null;
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = point.x;
+    svgPoint.y = point.y;
+    const screen = svgPoint.matrixTransform(matrix);
+    return { x: screen.x, y: screen.y };
+  };
+
+  const handlePointerDownCapture = (event) => {
+    if (event.pointerType !== "touch") return;
+    touchPointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touchPointers.current.size !== 2) return;
+    const [first, second] = [...touchPointers.current.values()];
+    const centerClient = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    const centerWorld = clientToWorld(centerClient.x, centerClient.y);
+    pinchStart.current = {
+      distance: Math.hypot(second.x - first.x, second.y - first.y) || 1,
+      centerClient,
+      centerWorld,
+      view,
+    };
+    panStart.current = null;
+    draggingNodeRef.current = null;
+    onCanvasPointerUp();
+  };
+
   const handlePointerDown = (event) => {
+    if (pinchStart.current) return;
     if (panMode || event.button === 1) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -94,6 +138,26 @@ export default function CadCanvas({ cad }) {
   };
 
   const handlePointerMove = (event) => {
+    if (event.pointerType === "touch" && touchPointers.current.has(event.pointerId)) {
+      touchPointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (pinchStart.current && touchPointers.current.size >= 2) {
+      const [first, second] = [...touchPointers.current.values()];
+      const currentDistance = Math.hypot(second.x - first.x, second.y - first.y) || 1;
+      const currentCenter = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+      const factor = pinchStart.current.distance / currentDistance;
+      const width = Math.max(72, Math.min(WORKSPACE.width * 3, pinchStart.current.view.width * factor));
+      const height = Math.max(48, Math.min(WORKSPACE.height * 3, pinchStart.current.view.height * factor));
+      const rect = svgRef.current?.getBoundingClientRect();
+      const dx = rect ? ((currentCenter.x - pinchStart.current.centerClient.x) / Math.max(1, rect.width)) * width : 0;
+      const dy = rect ? ((currentCenter.y - pinchStart.current.centerClient.y) / Math.max(1, rect.height)) * height : 0;
+      const centerWorld = pinchStart.current.centerWorld || {
+        x: pinchStart.current.view.x + pinchStart.current.view.width / 2,
+        y: pinchStart.current.view.y + pinchStart.current.view.height / 2,
+      };
+      setView({ x: centerWorld.x - width / 2 - dx, y: centerWorld.y - height / 2 - dy, width, height });
+      return;
+    }
     if (panStart.current) {
       const rect = cad.svgRef.current.getBoundingClientRect();
       const dx = ((event.clientX - panStart.current.clientX) / rect.width) * panStart.current.view.width;
@@ -101,12 +165,35 @@ export default function CadCanvas({ cad }) {
       setView({ ...panStart.current.view, x: panStart.current.view.x - dx, y: panStart.current.view.y - dy });
       return;
     }
+    if (draggingNodeRef.current != null && cad.angleSnap) {
+      const draggedId = draggingNodeRef.current;
+      const rawPoint = clientToWorld(event.clientX, event.clientY);
+      const connected = walls.find((wall) => wall.startNodeId === draggedId || wall.endNodeId === draggedId);
+      const anchorId = connected ? (connected.startNodeId === draggedId ? connected.endNodeId : connected.startNodeId) : null;
+      const anchor = anchorId != null ? nodeMap.get(anchorId) : null;
+      if (rawPoint && anchor) {
+        const snapped = snapAngle(anchor, rawPoint);
+        const screen = worldToClient(snapped);
+        if (screen) {
+          onCanvasPointerMove({ clientX: screen.x, clientY: screen.y });
+          return;
+        }
+      }
+    }
     onCanvasPointerMove(event);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (event) => {
+    if (event?.pointerType === "touch") touchPointers.current.delete(event.pointerId);
+    if (touchPointers.current.size < 2) pinchStart.current = null;
     panStart.current = null;
+    draggingNodeRef.current = null;
     onCanvasPointerUp();
+  };
+
+  const handleNodePointerDown = (nodeId) => (event) => {
+    if (tool === "select" && !isNodeLocked(nodeId)) draggingNodeRef.current = nodeId;
+    onNodePointerDown(nodeId)(event);
   };
 
   return (
@@ -117,6 +204,7 @@ export default function CadCanvas({ cad }) {
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
+        onPointerDownCapture={handlePointerDownCapture}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -163,22 +251,11 @@ export default function CadCanvas({ cad }) {
           return (
             <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ ...layerStyle("architecture"), cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
-              <line
-                x1={start.x}
-                y1={start.y}
-                x2={end.x}
-                y2={end.y}
-                stroke={selected ? "#2F78C4" : wall.locked ? "#5B6B78" : "#1B2B3A"}
-                strokeWidth={Math.max(2.5, wall.thicknessInches)}
-                strokeLinecap="square"
-                style={{ pointerEvents: "none" }}
-              />
+              <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={selected ? "#2F78C4" : wall.locked ? "#5B6B78" : "#1B2B3A"} strokeWidth={Math.max(2.5, wall.thicknessInches)} strokeLinecap="square" style={{ pointerEvents: "none" }} />
               {cad.layerSettings.dimensions.visible && (selected || tool === "wall") && (
                 <g style={{ pointerEvents: "none" }}>
                   <rect x={midpoint.x - 25} y={midpoint.y - 10} width="50" height="16" rx="3" fill="#FBF8F1" opacity="0.92" />
-                  <text x={midpoint.x} y={midpoint.y + 2} textAnchor="middle" fontSize="8" fill="#5B6B78" className="mono">
-                    {lengthToDisplay(distance(start, end), unit, unit === "imperial")}
-                  </text>
+                  <text x={midpoint.x} y={midpoint.y + 2} textAnchor="middle" fontSize="8" fill="#5B6B78" className="mono">{lengthToDisplay(distance(start, end), unit, unit === "imperial")}</text>
                   {wall.locked && <Lock x={midpoint.x + 18} y={midpoint.y - 7} size={9} color="#B8863E" />}
                 </g>
               )}
@@ -187,16 +264,7 @@ export default function CadCanvas({ cad }) {
         })}
 
         {activeNodeId != null && pointer && nodeMap.get(activeNodeId) && (
-          <line
-            x1={nodeMap.get(activeNodeId).x}
-            y1={nodeMap.get(activeNodeId).y}
-            x2={pointer.x}
-            y2={pointer.y}
-            stroke="#B8863E"
-            strokeWidth="2"
-            strokeDasharray="6 4"
-            style={{ ...layerStyle("architecture"), pointerEvents: "none" }}
-          />
+          <line x1={nodeMap.get(activeNodeId).x} y1={nodeMap.get(activeNodeId).y} x2={pointer.x} y2={pointer.y} stroke="#B8863E" strokeWidth="2" strokeDasharray="6 4" style={{ ...layerStyle("architecture"), pointerEvents: "none" }} />
         )}
 
         {openings.map((opening) => {
@@ -293,25 +361,13 @@ export default function CadCanvas({ cad }) {
           );
         })}
 
-        {nodes
-          .filter((node) => visibleNodeIds.has(node.id))
-          .map((node) => {
-            const locked = isNodeLocked(node.id);
-            const active = node.id === activeNodeId;
-            return (
-              <circle
-                key={node.id}
-                cx={node.x}
-                cy={node.y}
-                r={active ? 6 : 4.5}
-                fill={locked ? "#5B6B78" : active ? "#B8863E" : "#FBF8F1"}
-                stroke={active ? "#1B2B3A" : "#B8863E"}
-                strokeWidth="1.5"
-                onPointerDown={onNodePointerDown(node.id)}
-                style={{ ...layerStyle("architecture"), cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }}
-              />
-            );
-          })}
+        {nodes.filter((node) => visibleNodeIds.has(node.id)).map((node) => {
+          const locked = isNodeLocked(node.id);
+          const active = node.id === activeNodeId;
+          return (
+            <circle key={node.id} cx={node.x} cy={node.y} r={active ? 6 : 4.5} fill={locked ? "#5B6B78" : active ? "#B8863E" : "#FBF8F1"} stroke={active ? "#1B2B3A" : "#B8863E"} strokeWidth="1.5" onPointerDown={handleNodePointerDown(node.id)} style={{ ...layerStyle("architecture"), cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }} />
+          );
+        })}
       </svg>
 
       <div className="pointer-events-none absolute left-1/2 top-3 hidden -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm sm:block">
@@ -329,21 +385,15 @@ export default function CadCanvas({ cad }) {
       </div>
 
       {previewMeasurement && (
-        <div className="mono absolute bottom-3 left-3 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-2 py-1 text-[10px] text-[#5B6B78] shadow-sm">
-          {lengthToDisplay(previewMeasurement.length, unit, unit === "imperial")} · {previewMeasurement.angle.toFixed(0)}°
-        </div>
+        <div className="mono absolute bottom-3 left-3 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-2 py-1 text-[10px] text-[#5B6B78] shadow-sm">{lengthToDisplay(previewMeasurement.length, unit, unit === "imperial")} · {previewMeasurement.angle.toFixed(0)}°</div>
       )}
 
       {cad.drawingWarnings.length > 0 && (
-        <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">
-          {cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}
-        </div>
+        <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">{cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}</div>
       )}
 
       {cad.designWarnings.length > 0 && (
-        <div className="absolute bottom-3 right-3 max-w-xs rounded-md border border-[#B2483A] bg-[#FFF1EE]/95 px-2 py-1 text-[10px] text-[#8D342A] shadow-sm">
-          {cad.designWarnings[0]}{cad.designWarnings.length > 1 ? ` (+${cad.designWarnings.length - 1} more)` : ""}
-        </div>
+        <div className="absolute bottom-3 right-3 max-w-xs rounded-md border border-[#B2483A] bg-[#FFF1EE]/95 px-2 py-1 text-[10px] text-[#8D342A] shadow-sm">{cad.designWarnings[0]}{cad.designWarnings.length > 1 ? ` (+${cad.designWarnings.length - 1} more)` : ""}</div>
       )}
 
       {walls.length === 0 && (
