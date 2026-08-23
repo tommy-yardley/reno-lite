@@ -23,6 +23,7 @@ export default function CadCanvas({ cad }) {
     selectedWallId,
     selectedOpeningId,
     selectedObjectId,
+    selectedRoomId,
     pointer,
     onCanvasPointerDown,
     onCanvasPointerMove,
@@ -32,6 +33,7 @@ export default function CadCanvas({ cad }) {
     onOpeningPointerDown,
     onOpeningResizePointerDown,
     onObjectPointerDown,
+    onRoomPointerDown,
     isNodeLocked,
   } = cad;
 
@@ -132,11 +134,11 @@ export default function CadCanvas({ cad }) {
             y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
           };
           return (
-            <g key={room.id} style={{ pointerEvents: "none" }}>
-              <polygon points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill={room.color || "#B9D8C2"} fillOpacity="0.34" />
-              <text x={center.x} y={center.y - 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="#1B2B3A" className="serif">{room.name}</text>
+            <g key={room.id}>
+              <polygon onPointerDown={onRoomPointerDown(room.id)} points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill={room.classification === "void" ? "#A8A8A2" : room.color || "#B9D8C2"} fillOpacity={room.classification === "void" ? "0.5" : "0.34"} stroke={room.id === selectedRoomId ? "#2F78C4" : room.classification === "void" ? "#777770" : "none"} strokeWidth={room.id === selectedRoomId ? "2" : "1"} strokeDasharray={room.classification === "void" ? "5 3" : undefined} style={{ cursor: tool === "select" ? "pointer" : "default" }} />
+              <text x={center.x} y={center.y - 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="#1B2B3A" className="serif" style={{ pointerEvents: "none" }}>{room.name}</text>
               <text x={center.x} y={center.y + 10} textAnchor="middle" fontSize="7" fill="#5B6B78" className="mono">
-                {unit === "metric" ? `${(polygonArea(points) / (39.3700787 ** 2)).toFixed(1)} m²` : `${(polygonArea(points) / 144).toFixed(1)} ft²`}
+                {room.classification === "void" ? "VOID · " : ""}{unit === "metric" ? `${(cad.roomAreas.find((item) => item.id === room.id)?.areaSqInches / (39.3700787 ** 2)).toFixed(1)} m²` : `${(cad.roomAreas.find((item) => item.id === room.id)?.areaSqInches / 144).toFixed(1)} ft²`}
               </text>
             </g>
           );
@@ -287,7 +289,7 @@ export default function CadCanvas({ cad }) {
 
       <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm">
         {tool === "wall" && (activeNodeId == null ? "Wall tool · click an anchor to begin" : "Drawing wall · click to place, or enter an exact length")}
-        {tool === "select" && (selectedOpeningId != null ? "Opening selected · drag blue handles to resize" : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : "Select tool · click an item to edit or drag it")}
+        {tool === "select" && (selectedOpeningId != null ? "Opening selected · drag blue handles to resize" : selectedWallId != null ? "Wall selected · edit its exact dimensions in the panel" : selectedRoomId != null ? "Space selected · name it or mark it as a room or void" : "Select tool · click an item or enclosed space to edit it")}
         {(tool === "door" || tool === "window") && `Place ${tool} · click a wall`}
         {tool === "object" && "Placement tool · click the drawing or a host wall"}
       </div>

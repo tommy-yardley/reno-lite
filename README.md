@@ -27,11 +27,15 @@ keep the agent plan beside the canvas as a visual reference.
 - Anchors only appear while drawing or when their wall is selected.
 - Local persistence plus undo/redo.
 - Closing a wall chain creates a named, typed room with live floor area.
+- Enclosed spaces can be selected and classified as rooms or subtractive voids;
+  room schedules report gross, excluded, and net area.
 - Doors and windows attach parametrically to host walls with editable widths; door
   swings can be flipped. Selected openings expose direct resize handles and UK metric
   size presets.
 - Furniture presets can be placed, dragged, resized, and rotated independently of
   room geometry.
+- A UK-oriented metric catalogue covers standard living, dining, bedroom, office,
+  kitchen, utility, and storage footprints.
 - Live layout checks highlight overlapping furniture, items outside room boundaries,
   and furniture obstructing a door swing.
 - Sockets, double sockets, switches, radiators, ceiling lights, and pendants use

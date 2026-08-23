@@ -120,17 +120,22 @@ export default function CadSidebar({ cad }) {
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Rooms</h2>
           <div className="space-y-2">
             {cad.roomAreas.map((room) => (
-              <div key={room.id} className="rounded-lg border border-[#D8CCB0] bg-[#FBF8F1] p-2.5">
+              <div key={room.id} onClick={() => cad.setSelectedRoomId(room.id)} className="rounded-lg border bg-[#FBF8F1] p-2.5" style={{ borderColor: cad.selectedRoomId === room.id ? "#2F78C4" : "#D8CCB0" }}>
                 <div className="flex items-center gap-2">
                   <input value={room.name} onChange={(event) => cad.updateRoom(room.id, { name: event.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-medium" />
                   <button onClick={() => cad.deleteRoom(room.id)} className="text-[#B2483A]"><Trash2 size={13} /></button>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  <select value={room.type} onChange={(event) => cad.updateRoom(room.id, { type: event.target.value })} className="rounded border border-[#D8CCB0] bg-transparent px-1 py-0.5 text-[10px] text-[#5B6B78]">
+                  <select value={room.type} disabled={room.classification === "void"} onChange={(event) => cad.updateRoom(room.id, { type: event.target.value })} className="rounded border border-[#D8CCB0] bg-transparent px-1 py-0.5 text-[10px] text-[#5B6B78] disabled:opacity-40">
                     {["Room", "Kitchen", "Bedroom", "Bathroom", "Living", "Hall", "Utility"].map((type) => <option key={type}>{type}</option>)}
                   </select>
                   <span className="mono text-[10px] text-[#8A97A3]">{unit === "metric" ? `${(room.areaSqInches / (39.3700787 ** 2)).toFixed(1)} m²` : `${(room.areaSqInches / 144).toFixed(1)} ft²`}</span>
                 </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <select value={room.classification || "room"} onChange={(event) => cad.updateRoom(room.id, { classification: event.target.value, hostRoomId: event.target.value === "room" ? null : room.hostRoomId })} className="rounded border border-[#D8CCB0] bg-transparent px-1 py-1 text-[10px] text-[#5B6B78]"><option value="room">Room</option><option value="void">Void / excluded</option></select>
+                  {room.classification === "void" && <select value={room.hostRoomId || ""} onChange={(event) => cad.updateRoom(room.id, { hostRoomId: Number(event.target.value) || null })} className="rounded border border-[#D8CCB0] bg-transparent px-1 py-1 text-[10px] text-[#5B6B78]"><option value="">Subtract from…</option>{cad.rooms.filter((candidate) => candidate.id !== room.id && candidate.classification !== "void").map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select>}
+                </div>
+                {room.classification !== "void" && room.voidAreaSqInches > 0 && <p className="mono mt-1 text-[9px] text-[#8A97A3]">Gross {(room.grossAreaSqInches / (39.3700787 ** 2)).toFixed(1)} m² · voids −{(room.voidAreaSqInches / (39.3700787 ** 2)).toFixed(1)} m²</p>}
               </div>
             ))}
           </div>
@@ -140,7 +145,7 @@ export default function CadSidebar({ cad }) {
       <section>
         <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Units</h2>
         <div className="grid grid-cols-2 gap-2">
-          {[{ value: "metric", label: "m / cm" }, { value: "imperial", label: "ft / in" }].map((option) => (
+          {[{ value: "metric", label: "m / mm" }, { value: "imperial", label: "ft / in" }].map((option) => (
             <button key={option.value} onClick={() => cad.setUnit(option.value)} className="rounded border py-1.5 text-xs" style={unit === option.value ? { borderColor: "#B8863E", color: "#B8863E" } : { borderColor: "#D8CCB0", color: "#5E86A8" }}>{option.label}</button>
           ))}
         </div>
