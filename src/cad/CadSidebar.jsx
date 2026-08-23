@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Lock, LockOpen, MousePointer2, Pencil, Trash2 } from "lucide-react";
 import { distance } from "./geometry";
 import { parseLengthInput } from "../lib/units";
+import ObjectPanel from "./ObjectPanel";
 
 export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
@@ -21,7 +22,7 @@ export default function CadSidebar({ cad }) {
       <section>
         <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#5B6B78]">Drawing tools</h2>
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => { cad.finishWallChain(); cad.setTool("select"); }} className="flex items-center justify-center gap-1.5 rounded-md border py-2 text-xs" style={cad.tool === "select" ? { background: "#1B2B3A", color: "#FBF8F1", borderColor: "#1B2B3A" } : { borderColor: "#D8CCB0", color: "#5E86A8" }}>
+          <button onClick={() => { cad.finishWallChain(); cad.setPlacementKind(null); cad.setTool("select"); }} className="flex items-center justify-center gap-1.5 rounded-md border py-2 text-xs" style={cad.tool === "select" ? { background: "#1B2B3A", color: "#FBF8F1", borderColor: "#1B2B3A" } : { borderColor: "#D8CCB0", color: "#5E86A8" }}>
             <MousePointer2 size={14} /> Select
           </button>
           <button onClick={() => cad.setTool("wall")} className="flex items-center justify-center gap-1.5 rounded-md border py-2 text-xs" style={cad.tool === "wall" ? { background: "#B8863E", color: "#FBF8F1", borderColor: "#B8863E" } : { borderColor: "#D8CCB0", color: "#5E86A8" }}>
@@ -35,9 +36,11 @@ export default function CadSidebar({ cad }) {
           Snap walls every 15°
         </label>
         {cad.activeNodeId != null && (
-          <button onClick={() => cad.setActiveNodeId(null)} className="mt-2 w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Finish wall chain (Esc)</button>
+          <button onClick={cad.finishWallChain} className="mt-2 w-full rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Finish wall chain (Esc)</button>
         )}
       </section>
+
+      <ObjectPanel cad={cad} />
 
       {cad.selectedOpening && (
         <section>
