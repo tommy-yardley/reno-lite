@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
-import { buildJpegPdf } from "../lib/pdfExport";
+import { buildJpegPdf, computePrintPlan, PAPER_SIZES, PRINT_SCALES, renderPrintPdf } from "../lib/pdfExport";
 import { saveOrShareFile } from "../lib/nativeExport";
 import { buildCadDxf, buildCadSvg, parseProject, serializeProject } from "./export";
 
@@ -31,6 +31,8 @@ async function svgToCanvas(svg, multiplier = 2) {
 export default function ExportPanel({ cad }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
+  const [paperKey, setPaperKey] = useState("a3");
+  const [scaleKey, setScaleKey] = useState(cad.unit === "metric" ? "1-50" : "1/4");
   const importRef = useRef(null);
   const project = {
     nodes: cad.nodes,
@@ -41,6 +43,14 @@ export default function ExportPanel({ cad }) {
     unit: cad.unit,
     referenceImage: cad.referenceImage,
   };
+  const printScales = PRINT_SCALES[cad.unit] || PRINT_SCALES.metric;
+  const selectedScale = printScales.find((scale) => scale.key === scaleKey) || printScales.find((scale) => scale.default) || printScales[0];
+  const printDetails = useMemo(() => {
+    if (!cad.walls.length) return null;
+    const svg = new DOMParser().parseFromString(buildCadSvg(project), "image/svg+xml").documentElement;
+    const viewBox = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+    return computePrintPlan({ realWidthIn: viewBox[2], realHeightIn: viewBox[3], paperWIn: PAPER_SIZES[paperKey].wIn, paperHIn: PAPER_SIZES[paperKey].hIn, scaleRatio: selectedScale.ratio });
+  }, [cad.nodes, cad.walls, cad.rooms, cad.openings, cad.objects, paperKey, selectedScale.ratio]);
 
   const run = async (name, action) => {
     setBusy(name);
@@ -73,6 +83,12 @@ export default function ExportPanel({ cad }) {
     const blob = buildJpegPdf(bytes, canvas.width, canvas.height, canvas.width * ratio, canvas.height * ratio);
     await saveOrShareFile(blob, "reno-lite-plan.pdf");
   };
+  const exportPrintPdf = async () => {
+    const svg = new DOMParser().parseFromString(buildCadSvg(project), "image/svg+xml").documentElement;
+    const viewBox = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+    const result = await renderPrintPdf({ svgEl: svg, imageW: viewBox[2], imageH: viewBox[3], scale: 1, paperKey, scaleRatio: selectedScale.ratio, scaleLabel: selectedScale.label });
+    await saveOrShareFile(result.blob, `reno-lite-plan-${selectedScale.key}-${paperKey}.pdf`);
+  };
 
   const importProject = async (event) => {
     const file = event.target.files?.[0];
@@ -93,6 +109,19 @@ export default function ExportPanel({ cad }) {
         {[{ key: "svg", label: "SVG", action: exportSvg }, { key: "dxf", label: "CAD DXF", action: exportDxf }, { key: "png", label: "PNG", action: exportPng }, { key: "pdf", label: "PDF", action: exportPdf }].map((item) => (
           <button key={item.key} disabled={busy != null || cad.walls.length === 0} onClick={() => run(item.key, item.action)} className="flex items-center justify-center gap-1.5 rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8] disabled:opacity-40"><Download size={12} /> {busy === item.key ? "…" : item.label}</button>
         ))}
+      </div>
+      <div className="mt-3 rounded-lg border border-[#B8863E] bg-[#FBF8F1] p-3">
+        <p className="mono mb-2 text-[10px] uppercase tracking-wider text-[#B8863E]">Print at true scale</p>
+        <div className="grid grid-cols-2 gap-2">
+          <select value={paperKey} onChange={(event) => setPaperKey(event.target.value)} className="min-w-0 rounded border border-[#D8CCB0] bg-transparent px-1 py-1.5 text-[10px] text-[#5B6B78]">
+            {Object.entries(PAPER_SIZES).map(([key, paper]) => <option key={key} value={key}>{paper.label}</option>)}
+          </select>
+          <select value={selectedScale.key} onChange={(event) => setScaleKey(event.target.value)} className="min-w-0 rounded border border-[#D8CCB0] bg-transparent px-1 py-1.5 text-[10px] text-[#5B6B78]">
+            {printScales.map((scale) => <option key={scale.key} value={scale.key}>{scale.label}</option>)}
+          </select>
+        </div>
+        {printDetails && <p className="mt-2 text-[10px] text-[#8A97A3]">{printDetails.tiles.length} {printDetails.tiles.length === 1 ? "sheet" : "tiled sheets"} · print at 100% / actual size</p>}
+        <button disabled={busy != null || cad.walls.length === 0} onClick={() => run("print", exportPrintPdf)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-[#B8863E] py-1.5 text-xs text-[#FBF8F1] disabled:opacity-40"><Download size={12} /> {busy === "print" ? "Preparing…" : "True-scale PDF"}</button>
       </div>
       <button onClick={() => run("project", exportProject)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#B8863E] py-1.5 text-xs text-[#B8863E]"><Download size={12} /> Save editable project</button>
       <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importProject} />

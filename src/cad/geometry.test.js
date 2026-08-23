@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nodeIsConstrained, openingSpan, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, wallKey } from "./geometry.js";
+import { nodeIsConstrained, objectFootprint, openingSpan, pointInPolygon, polygonArea, polygonsIntersect, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, validateDesignLayout, wallKey } from "./geometry.js";
 
 test("snapAngle snaps to 15 degree increments while preserving length", () => {
   const point = snapAngle({ x: 0, y: 0 }, { x: 10, y: 4 });
@@ -49,4 +49,37 @@ test("segmentIntersection returns the junction position on both walls", () => {
   assert.deepEqual(hit.point, { x: 50, y: 50 });
   assert.equal(hit.t, 0.5);
   assert.equal(hit.u, 0.5);
+});
+
+test("rotated furniture footprints support containment and overlap checks", () => {
+  const footprint = objectFootprint({ x: 50, y: 50, widthInches: 40, depthInches: 20, rotation: 90 });
+  assert.equal(pointInPolygon({ x: 50, y: 50 }, footprint), true);
+  assert.equal(polygonsIntersect(footprint, objectFootprint({ x: 55, y: 55, widthInches: 10, depthInches: 10, rotation: 0 })), true);
+  assert.equal(polygonsIntersect(footprint, objectFootprint({ x: 100, y: 100, widthInches: 10, depthInches: 10, rotation: 0 })), false);
+});
+
+test("layout validation flags furniture collisions and room escapes", () => {
+  const result = validateDesignLayout({
+    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 100, y: 0 }, { id: 3, x: 100, y: 100 }, { id: 4, x: 0, y: 100 }],
+    walls: [], openings: [], rooms: [{ id: 5, nodeIds: [1, 2, 3, 4] }],
+    objects: [
+      { id: 6, name: "Table", mount: "floor", x: 40, y: 40, widthInches: 30, depthInches: 30, rotation: 0 },
+      { id: 7, name: "Chair", mount: "floor", x: 50, y: 40, widthInches: 20, depthInches: 20, rotation: 0 },
+      { id: 8, name: "Sofa", mount: "floor", x: 100, y: 50, widthInches: 30, depthInches: 30, rotation: 0 },
+    ],
+  });
+  assert.equal(result.warnings.length, 2);
+  assert.deepEqual(result.objectIds.sort(), [6, 7, 8]);
+});
+
+test("layout validation detects a furnishing in a door swing", () => {
+  const result = validateDesignLayout({
+    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 100, y: 0 }],
+    walls: [{ id: 3, startNodeId: 1, endNodeId: 2 }],
+    rooms: [],
+    openings: [{ id: 4, type: "door", wallId: 3, t: 0.5, widthInches: 30, swing: 1 }],
+    objects: [{ id: 5, name: "Chair", mount: "floor", x: 45, y: 12, widthInches: 18, depthInches: 18, rotation: 0 }],
+  });
+  assert.deepEqual(result.warnings, ["Chair obstructs a door swing."]);
+  assert.deepEqual(result.objectIds, [5]);
 });

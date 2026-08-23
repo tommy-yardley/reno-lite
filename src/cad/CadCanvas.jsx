@@ -218,6 +218,7 @@ export default function CadCanvas({ cad }) {
         {objects.map((object) => {
           const preset = OBJECT_CATALOG[object.kind] || {};
           const selected = object.id === selectedObjectId;
+          const warning = cad.warningObjectIds.includes(object.id);
           if (object.mount === "wall") {
             const wall = walls.find((item) => item.id === object.wallId);
             const start = wall && nodeMap.get(wall.startNodeId);
@@ -236,8 +237,8 @@ export default function CadCanvas({ cad }) {
           if (object.mount === "floor") {
             return (
               <g key={object.id} transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ cursor: "move" }}>
-                {selected && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke="#2F78C4" strokeWidth="2" strokeDasharray="4 3" />}
-                <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill="#D7C7A7" fillOpacity="0.82" stroke="#7A6F5C" strokeWidth="1.5" />
+                {(selected || warning) && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke={warning ? "#B2483A" : "#2F78C4"} strokeWidth="2" strokeDasharray="4 3" />}
+                <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill={warning ? "#E8B7AE" : "#D7C7A7"} fillOpacity="0.82" stroke={warning ? "#B2483A" : "#7A6F5C"} strokeWidth="1.5" />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="7" fill="#1B2B3A" className="mono" style={{ pointerEvents: "none" }}>{object.name}</text>
               </g>
             );
@@ -289,6 +290,12 @@ export default function CadCanvas({ cad }) {
       {cad.drawingWarnings.length > 0 && (
         <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">
           {cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}
+        </div>
+      )}
+
+      {cad.designWarnings.length > 0 && (
+        <div className="absolute bottom-3 right-3 max-w-xs rounded-md border border-[#B2483A] bg-[#FFF1EE]/95 px-2 py-1 text-[10px] text-[#8D342A] shadow-sm">
+          {cad.designWarnings[0]}{cad.designWarnings.length > 1 ? ` (+${cad.designWarnings.length - 1} more)` : ""}
         </div>
       )}
 
