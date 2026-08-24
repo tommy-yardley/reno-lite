@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, snapDegrees, validateCadGraph, validateDesignLayout, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
-import { validateElectrical } from "./electrical";
+import { CIRCUIT_PRESETS, validateElectrical } from "./electrical";
 import { validatePlumbing } from "./plumbing";
 import { alignObjects, arrangementCandidates, distributeObjects } from "./layout";
 import { applyProjectCommand, projectCommands } from "./commands";
@@ -864,9 +864,10 @@ export function useCadState() {
 
   const updateLayer = (layer, updates) => runCommand(projectCommands.setLayer(layer, updates));
 
-  const addElectricalCircuit = () => {
-    const colours = ["#C0392B", "#2E86C1", "#8E44AD", "#D68910", "#148F77"];
-    const circuit = { id: nextId.current++, name: `Circuit ${electricalCircuits.length + 1}`, kind: "general", ratingAmps: 32, colour: colours[electricalCircuits.length % colours.length] };
+  const addElectricalCircuit = (presetKey = "socketsRing") => {
+    const preset = CIRCUIT_PRESETS[presetKey] || CIRCUIT_PRESETS.socketsRing;
+    const sameKind = electricalCircuits.filter((circuit) => circuit.kind === preset.kind).length;
+    const circuit = { id: nextId.current++, ...preset, name: sameKind ? `${preset.name} ${sameKind + 1}` : preset.name };
     runCommand(projectCommands.append("electricalCircuit", circuit, "Add circuit"));
     return circuit.id;
   };
@@ -902,7 +903,7 @@ export function useCadState() {
   };
 
   const addShoppingItem = () => {
-    const item = { id: nextId.current++, name: "New item", category: "General", supplier: "", url: "", unitPricePence: 0, quantity: 1, status: "proposed" };
+    const item = { id: nextId.current++, name: "New item", category: "General", roomName: "", supplier: "", url: "", unitPricePence: 0, quantity: 1, status: "proposed" };
     runCommand(projectCommands.append("shoppingItem", item, "Add shopping item"));
   };
 
