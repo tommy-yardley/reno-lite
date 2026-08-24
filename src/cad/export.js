@@ -2,6 +2,7 @@ import { openingSpan, polygonArea } from "./geometry.js";
 import { OBJECT_CATALOG } from "./catalog.js";
 import { electricalRoutePoints } from "./electrical.js";
 import { PIPE_SYSTEMS, plumbingRoutePoints } from "./plumbing.js";
+export { parseProject, serializeProject } from "./project.js";
 
 const xmlEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character]);
 
@@ -130,27 +131,4 @@ export function buildCadDxf(project) {
     points.forEach((point) => { output += dxfPair(10, point.x) + dxfPair(20, -point.y); });
   });
   return output + dxfPair(0, "ENDSEC") + dxfPair(0, "EOF");
-}
-
-export function serializeProject(project) {
-  return JSON.stringify({ format: "reno-lite", version: 3, ...project }, null, 2);
-}
-
-export function parseProject(text) {
-  const project = JSON.parse(text);
-  if (project.format !== "reno-lite" || !Array.isArray(project.nodes) || !Array.isArray(project.walls)) throw new Error("Not a RenoLite project file");
-  return {
-    nodes: project.nodes,
-    walls: project.walls,
-    rooms: project.rooms || [],
-    openings: project.openings || [],
-    objects: project.objects || [],
-    unit: project.unit || "metric",
-    referenceImage: project.referenceImage || null,
-    ...(project.layerSettings ? { layerSettings: project.layerSettings } : {}),
-    ...(project.electricalCircuits ? { electricalCircuits: project.electricalCircuits } : {}),
-    ...(project.electricalRoutes ? { electricalRoutes: project.electricalRoutes } : {}),
-    ...(project.plumbingRoutes ? { plumbingRoutes: project.plumbingRoutes } : {}),
-    ...(project.shoppingItems ? { shoppingItems: project.shoppingItems } : {}),
-  };
 }

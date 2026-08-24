@@ -34,20 +34,7 @@ export default function ExportPanel({ cad }) {
   const [paperKey, setPaperKey] = useState("a3");
   const [scaleKey, setScaleKey] = useState(cad.unit === "metric" ? "1-50" : "1/4");
   const importRef = useRef(null);
-  const project = {
-    nodes: cad.nodes,
-    walls: cad.walls,
-    rooms: cad.rooms,
-    openings: cad.openings,
-    objects: cad.objects,
-    unit: cad.unit,
-    referenceImage: cad.referenceImage,
-    layerSettings: cad.layerSettings,
-    electricalCircuits: cad.electricalCircuits,
-    electricalRoutes: cad.electricalRoutes,
-    plumbingRoutes: cad.plumbingRoutes,
-    shoppingItems: cad.shoppingItems,
-  };
+  const project = cad.project;
   const printScales = PRINT_SCALES[cad.unit] || PRINT_SCALES.metric;
   const selectedScale = printScales.find((scale) => scale.key === scaleKey) || printScales.find((scale) => scale.default) || printScales[0];
   const printDetails = useMemo(() => {

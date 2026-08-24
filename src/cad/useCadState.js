@@ -5,20 +5,26 @@ import { compressImageForStorage } from "../lib/imageCompression";
 import { validateElectrical } from "./electrical";
 import { validatePlumbing } from "./plumbing";
 import { alignObjects, arrangementCandidates, distributeObjects } from "./layout";
+import { applyProjectCommand, projectCommands } from "./commands";
+import {
+  createEmptyProject,
+  DEFAULT_LAYERS,
+  nextProjectId,
+  normaliseProject,
+  PROJECT_STORAGE_KEY,
+} from "./project";
 
 export const WORKSPACE = { width: 720, height: 480 };
-const STORAGE_KEY = "reno-lite:cad-v2";
 const DEFAULT_WALL_THICKNESS_IN = 4.5;
-const DEFAULT_LAYERS = Object.fromEntries(["architecture", "furniture", "electrical", "plumbing", "dimensions", "annotations", "reference"].map((key) => [key, { visible: true, locked: false }]));
 
 function initialState() {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
-    if (saved?.version === 2) return saved;
+    const saved = JSON.parse(window.localStorage.getItem(PROJECT_STORAGE_KEY));
+    if (saved) return normaliseProject(saved);
   } catch {
     // Start with an empty drawing when storage is unavailable or invalid.
   }
-  return { version: 2, nodes: [], walls: [], rooms: [], openings: [], objects: [], unit: "metric", referenceImage: null };
+  return createEmptyProject();
 }
 
 export function useCadState() {
@@ -32,6 +38,7 @@ export function useCadState() {
   const [electricalRoutes, setElectricalRoutes] = useState(initial.electricalRoutes || []);
   const [plumbingRoutes, setPlumbingRoutes] = useState(initial.plumbingRoutes || []);
   const [shoppingItems, setShoppingItems] = useState(initial.shoppingItems || []);
+  const [projectName, setProjectName] = useState(initial.name);
   const [unit, setUnit] = useState(initial.unit);
   const [referenceImage, setReferenceImage] = useState(initial.referenceImage);
   const [layerSettings, setLayerSettings] = useState({ ...DEFAULT_LAYERS, ...(initial.layerSettings || {}) });
@@ -55,9 +62,7 @@ export function useCadState() {
   const [draggingOpeningId, setDraggingOpeningId] = useState(null);
   const [angleSnap, setAngleSnap] = useState(true);
   const [saveStatus, setSaveStatus] = useState("idle");
-  const nextId = useRef(
-    Math.max(0, ...initial.nodes.map((node) => node.id), ...initial.walls.map((wall) => wall.id), ...(initial.rooms || []).map((room) => room.id), ...(initial.openings || []).map((opening) => opening.id), ...(initial.objects || []).map((object) => object.id), ...(initial.electricalCircuits || []).map((item) => item.id), ...(initial.electricalRoutes || []).map((item) => item.id), ...(initial.plumbingRoutes || []).map((item) => item.id), ...(initial.shoppingItems || []).map((item) => item.id)) + 1
-  );
+  const nextId = useRef(nextProjectId(initial));
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
   const undoStack = useRef([]);
@@ -85,26 +90,63 @@ export function useCadState() {
   const electricalWarnings = useMemo(() => validateElectrical({ objects, circuits: electricalCircuits, routes: electricalRoutes }), [objects, electricalCircuits, electricalRoutes]);
   const plumbingWarnings = useMemo(() => validatePlumbing({ objects, routes: plumbingRoutes }), [objects, plumbingRoutes]);
 
-  const snapshot = useCallback(() => ({ nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems }), [nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems]);
+  const project = useMemo(
+    () =>
+      createEmptyProject({
+        name: projectName,
+        nodes,
+        walls,
+        rooms,
+        openings,
+        objects,
+        electricalCircuits,
+        electricalRoutes,
+        plumbingRoutes,
+        shoppingItems,
+        unit,
+        referenceImage,
+        layerSettings,
+      }),
+    [projectName, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings],
+  );
+  const snapshot = useCallback(() => project, [project]);
+  const applyProject = useCallback((next) => {
+    setProjectName(next.name);
+    setNodes(next.nodes);
+    setWalls(next.walls);
+    setRooms(next.rooms);
+    setOpenings(next.openings);
+    setObjects(next.objects);
+    setElectricalCircuits(next.electricalCircuits);
+    setElectricalRoutes(next.electricalRoutes);
+    setPlumbingRoutes(next.plumbingRoutes);
+    setShoppingItems(next.shoppingItems);
+    setUnit(next.unit);
+    setReferenceImage(next.referenceImage);
+    setLayerSettings(next.layerSettings);
+  }, []);
   const pushHistory = useCallback(() => {
     undoStack.current.push(snapshot());
     if (undoStack.current.length > 100) undoStack.current.shift();
     redoStack.current = [];
   }, [snapshot]);
+  const runCommand = useCallback(
+    (command) => {
+      const before = snapshot();
+      const after = applyProjectCommand(before, command);
+      if (after === before) return false;
+      pushHistory();
+      applyProject(after);
+      return true;
+    },
+    [applyProject, pushHistory, snapshot],
+  );
 
   const undo = () => {
     const previous = undoStack.current.pop();
     if (!previous) return;
     redoStack.current.push(snapshot());
-    setNodes(previous.nodes);
-    setWalls(previous.walls);
-    setRooms(previous.rooms || []);
-    setOpenings(previous.openings || []);
-    setObjects(previous.objects || []);
-    setElectricalCircuits(previous.electricalCircuits || []);
-    setElectricalRoutes(previous.electricalRoutes || []);
-    setPlumbingRoutes(previous.plumbingRoutes || []);
-    setShoppingItems(previous.shoppingItems || []);
+    applyProject(previous);
     setSelectedWallId(null);
     setActiveNodeId(null);
   };
@@ -113,15 +155,7 @@ export function useCadState() {
     const next = redoStack.current.pop();
     if (!next) return;
     undoStack.current.push(snapshot());
-    setNodes(next.nodes);
-    setWalls(next.walls);
-    setRooms(next.rooms || []);
-    setOpenings(next.openings || []);
-    setObjects(next.objects || []);
-    setElectricalCircuits(next.electricalCircuits || []);
-    setElectricalRoutes(next.electricalRoutes || []);
-    setPlumbingRoutes(next.plumbingRoutes || []);
-    setShoppingItems(next.shoppingItems || []);
+    applyProject(next);
     setSelectedWallId(null);
     setActiveNodeId(null);
   };
@@ -131,8 +165,8 @@ export function useCadState() {
     const timer = window.setTimeout(() => {
       try {
         window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ version: 2, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings })
+          PROJECT_STORAGE_KEY,
+          JSON.stringify(project)
         );
         setSaveStatus("saved");
       } catch {
@@ -140,7 +174,7 @@ export function useCadState() {
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings]);
+  }, [project]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -637,8 +671,8 @@ export function useCadState() {
   };
 
   const toggleWallLock = (wallId) => {
-    pushHistory();
-    setWalls((items) => items.map((wall) => (wall.id === wallId ? { ...wall, locked: !wall.locked } : wall)));
+    const wall = walls.find((item) => item.id === wallId);
+    if (wall) runCommand(projectCommands.patch("wall", [wallId], { locked: !wall.locked }, "Lock wall"));
   };
 
   const setWallLength = (wallId, inches) => {
@@ -669,47 +703,33 @@ export function useCadState() {
 
   const setWallThickness = (wallId, inches) => {
     if (!Number.isFinite(inches) || inches <= 0) return;
-    pushHistory();
-    setWalls((items) => items.map((wall) => (wall.id === wallId ? { ...wall, thicknessInches: inches } : wall)));
+    runCommand(projectCommands.patch("wall", [wallId], { thicknessInches: inches }, "Set wall thickness"));
   };
 
   const deleteSelectedWall = () => {
     if (!selectedWall) return;
-    pushHistory();
-    const remainingWalls = walls.filter((wall) => wall.id !== selectedWall.id);
-    const used = new Set(remainingWalls.flatMap((wall) => [wall.startNodeId, wall.endNodeId]));
-    setWalls(remainingWalls);
-    setNodes((items) => items.filter((node) => used.has(node.id)));
-    setRooms((items) => items.filter((room) => !room.wallIds.includes(selectedWall.id)));
-    setOpenings((items) => items.filter((opening) => opening.wallId !== selectedWall.id));
-    setObjects((items) => items.filter((object) => object.wallId !== selectedWall.id));
+    runCommand(projectCommands.remove("wall", [selectedWall.id], "Delete wall"));
     setSelectedWallId(null);
   };
 
   const updateRoom = (roomId, updates) => {
-    pushHistory();
-    setRooms((items) => items.map((room) => (room.id === roomId ? { ...room, ...updates } : room)));
+    runCommand(projectCommands.patch("room", [roomId], updates, "Edit room"));
   };
 
   const deleteRoom = (roomId) => {
-    pushHistory();
-    setRooms((items) => items.filter((room) => room.id !== roomId));
-    setRooms((items) => items.map((room) => room.hostRoomId === roomId ? { ...room, hostRoomId: null } : room));
+    runCommand(projectCommands.remove("room", [roomId], "Delete room"));
     setSelectedRoomId(null);
   };
 
   const updateOpening = (openingId, updates) => {
     if (updates.widthInches != null && (!Number.isFinite(updates.widthInches) || updates.widthInches <= 0)) return;
-    pushHistory();
-    setOpenings((items) => items.map((opening) => (opening.id === openingId ? { ...opening, ...updates } : opening)));
+    runCommand(projectCommands.patch("opening", [openingId], updates, "Edit opening"));
   };
 
   const updateOpenings = (openingIds, updates) => {
     if (!openingIds.length) return;
     if (updates.widthInches != null && (!Number.isFinite(updates.widthInches) || updates.widthInches <= 0)) return;
-    pushHistory();
-    const selected = new Set(openingIds);
-    setOpenings((items) => items.map((opening) => selected.has(opening.id) ? { ...opening, ...updates } : opening));
+    runCommand(projectCommands.patch("opening", openingIds, updates, "Edit openings"));
   };
 
   const duplicateOpenings = (openingIds) => {
@@ -728,17 +748,14 @@ export function useCadState() {
   };
 
   const deleteOpening = (openingId) => {
-    pushHistory();
-    setOpenings((items) => items.filter((opening) => opening.id !== openingId));
+    runCommand(projectCommands.remove("opening", [openingId], "Delete opening"));
     setSelectedOpeningId(null);
     setSelectedOpeningIds((ids) => ids.filter((id) => id !== openingId));
   };
 
   const deleteOpenings = (openingIds) => {
     if (!openingIds.length) return;
-    pushHistory();
-    const selected = new Set(openingIds);
-    setOpenings((items) => items.filter((opening) => !selected.has(opening.id)));
+    runCommand(projectCommands.remove("opening", openingIds, "Delete openings"));
     setSelectedOpeningId(null);
     setSelectedOpeningIds([]);
   };
@@ -746,8 +763,8 @@ export function useCadState() {
   const updateObject = (objectId, updates, recordHistory = true) => {
     if (updates.widthInches != null && (!Number.isFinite(updates.widthInches) || updates.widthInches <= 0)) return;
     if (updates.depthInches != null && (!Number.isFinite(updates.depthInches) || updates.depthInches <= 0)) return;
-    if (recordHistory) pushHistory();
-    setObjects((items) => items.map((object) => (object.id === objectId ? { ...object, ...updates } : object)));
+    if (recordHistory) runCommand(projectCommands.patch("object", [objectId], updates, "Edit object"));
+    else setObjects((items) => items.map((object) => (object.id === objectId ? { ...object, ...updates } : object)));
   };
 
   const alignSelectedObjects = (mode) => {
@@ -782,97 +799,70 @@ export function useCadState() {
     setObjects((items) => items.map((object) => updateMap.has(object.id) ? { ...object, ...updateMap.get(object.id) } : object));
   };
 
-  const updateLayer = (layer, updates) => setLayerSettings((settings) => ({ ...settings, [layer]: { ...settings[layer], ...updates } }));
+  const updateLayer = (layer, updates) => runCommand(projectCommands.setLayer(layer, updates));
 
   const addElectricalCircuit = () => {
-    pushHistory();
     const colours = ["#C0392B", "#2E86C1", "#8E44AD", "#D68910", "#148F77"];
     const circuit = { id: nextId.current++, name: `Circuit ${electricalCircuits.length + 1}`, kind: "general", ratingAmps: 32, colour: colours[electricalCircuits.length % colours.length] };
-    setElectricalCircuits((items) => [...items, circuit]);
+    runCommand(projectCommands.append("electricalCircuit", circuit, "Add circuit"));
     return circuit.id;
   };
 
   const updateElectricalCircuit = (circuitId, updates) => {
-    pushHistory();
-    setElectricalCircuits((items) => items.map((circuit) => circuit.id === circuitId ? { ...circuit, ...updates } : circuit));
+    runCommand(projectCommands.patch("electricalCircuit", [circuitId], updates, "Edit circuit"));
   };
 
   const deleteElectricalCircuit = (circuitId) => {
-    pushHistory();
-    setElectricalCircuits((items) => items.filter((circuit) => circuit.id !== circuitId));
-    setElectricalRoutes((items) => items.filter((route) => route.circuitId !== circuitId));
-    setObjects((items) => items.map((object) => object.circuitId === circuitId ? { ...object, circuitId: null } : object));
+    runCommand(projectCommands.remove("electricalCircuit", [circuitId], "Delete circuit"));
   };
 
   const addElectricalRoute = (fromObjectId, toObjectId, circuitId) => {
     if (!fromObjectId || !toObjectId || fromObjectId === toObjectId) return;
-    pushHistory();
-    setElectricalRoutes((items) => [...items, { id: nextId.current++, fromObjectId, toObjectId, circuitId: circuitId || null, via: [] }]);
+    runCommand(projectCommands.append("electricalRoute", { id: nextId.current++, fromObjectId, toObjectId, circuitId: circuitId || null, via: [] }, "Add wiring route"));
   };
 
   const deleteElectricalRoute = (routeId) => {
-    pushHistory();
-    setElectricalRoutes((items) => items.filter((route) => route.id !== routeId));
+    runCommand(projectCommands.remove("electricalRoute", [routeId], "Delete wiring route"));
   };
 
   const addPlumbingRoute = (fromObjectId, toObjectId, system = "cold", diameterMm = 15) => {
     if (!fromObjectId || !toObjectId || fromObjectId === toObjectId) return;
-    pushHistory();
-    setPlumbingRoutes((items) => [...items, { id: nextId.current++, fromObjectId, toObjectId, system, diameterMm, via: [] }]);
+    runCommand(projectCommands.append("plumbingRoute", { id: nextId.current++, fromObjectId, toObjectId, system, diameterMm, via: [] }, "Add plumbing route"));
   };
 
   const updatePlumbingRoute = (routeId, updates) => {
-    pushHistory();
-    setPlumbingRoutes((items) => items.map((route) => route.id === routeId ? { ...route, ...updates } : route));
+    runCommand(projectCommands.patch("plumbingRoute", [routeId], updates, "Edit plumbing route"));
   };
 
   const deletePlumbingRoute = (routeId) => {
-    pushHistory();
-    setPlumbingRoutes((items) => items.filter((route) => route.id !== routeId));
+    runCommand(projectCommands.remove("plumbingRoute", [routeId], "Delete plumbing route"));
   };
 
   const addShoppingItem = () => {
-    pushHistory();
     const item = { id: nextId.current++, name: "New item", category: "General", supplier: "", url: "", unitPricePence: 0, quantity: 1, status: "proposed" };
-    setShoppingItems((items) => [...items, item]);
+    runCommand(projectCommands.append("shoppingItem", item, "Add shopping item"));
   };
 
   const updateShoppingItem = (itemId, updates) => {
-    pushHistory();
-    setShoppingItems((items) => items.map((item) => item.id === itemId ? { ...item, ...updates } : item));
+    runCommand(projectCommands.patch("shoppingItem", [itemId], updates, "Edit shopping item"));
   };
 
   const deleteShoppingItem = (itemId) => {
-    pushHistory();
-    setShoppingItems((items) => items.filter((item) => item.id !== itemId));
+    runCommand(projectCommands.remove("shoppingItem", [itemId], "Delete shopping item"));
   };
 
   const deleteObject = (objectId) => {
-    pushHistory();
-    setObjects((items) => items.filter((object) => object.id !== objectId));
-    setElectricalRoutes((items) => items.filter((route) => route.fromObjectId !== objectId && route.toObjectId !== objectId));
-    setPlumbingRoutes((items) => items.filter((route) => route.fromObjectId !== objectId && route.toObjectId !== objectId));
+    runCommand(projectCommands.remove("object", [objectId], "Delete object"));
     setSelectedObjectId(null);
     setSelectedObjectIds([]);
     setSelectedRoomId(null);
   };
 
   const loadProject = (project) => {
+    const nextProject = normaliseProject(project);
     pushHistory();
-    setNodes(project.nodes || []);
-    setWalls(project.walls || []);
-    setRooms(project.rooms || []);
-    setOpenings(project.openings || []);
-    setObjects(project.objects || []);
-    setElectricalCircuits(project.electricalCircuits || []);
-    setElectricalRoutes(project.electricalRoutes || []);
-    setPlumbingRoutes(project.plumbingRoutes || []);
-    setShoppingItems(project.shoppingItems || []);
-    setUnit(project.unit || "metric");
-    setReferenceImage(project.referenceImage || null);
-    setLayerSettings({ ...DEFAULT_LAYERS, ...(project.layerSettings || {}) });
-    const ids = [...(project.nodes || []), ...(project.walls || []), ...(project.rooms || []), ...(project.openings || []), ...(project.objects || []), ...(project.electricalCircuits || []), ...(project.electricalRoutes || []), ...(project.plumbingRoutes || []), ...(project.shoppingItems || [])].map((item) => item.id || 0);
-    nextId.current = Math.max(0, ...ids) + 1;
+    applyProject(nextProject);
+    nextId.current = nextProjectId(nextProject);
     finishWallChain();
     setSelectedWallId(null);
     setSelectedOpeningId(null);
@@ -886,17 +876,7 @@ export function useCadState() {
 
   const clearProject = () => {
     pushHistory();
-    setNodes([]);
-    setWalls([]);
-    setRooms([]);
-    setOpenings([]);
-    setObjects([]);
-    setElectricalCircuits([]);
-    setElectricalRoutes([]);
-    setPlumbingRoutes([]);
-    setShoppingItems([]);
-    setReferenceImage(null);
-    setLayerSettings(DEFAULT_LAYERS);
+    applyProject(createEmptyProject({ unit }));
     setActiveLayer(null);
     nextId.current = 1;
     finishWallChain();
@@ -930,6 +910,9 @@ export function useCadState() {
   };
 
   return {
+    project,
+    projectName,
+    setProjectName,
     svgRef,
     fileInputRef,
     nodes,
