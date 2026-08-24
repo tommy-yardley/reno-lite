@@ -1,28 +1,18 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Hand, Lock, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { distance, openingSpan, polygonArea, snapAngle } from "./geometry";
+import { distance } from "./geometry";
 import { WORKSPACE } from "./useCadState";
 import { lengthToDisplay } from "../lib/units";
-import { OBJECT_CATALOG } from "./catalog";
-import { electricalRoutePoints } from "./electrical";
-import { PIPE_SYSTEMS, plumbingRoutePoints } from "./plumbing";
+import { buildRenderModel } from "./renderModel";
 
 export default function CadCanvas({ cad }) {
   const [view, setView] = useState({ x: 0, y: 0, width: WORKSPACE.width, height: WORKSPACE.height });
   const [panMode, setPanMode] = useState(false);
   const panStart = useRef(null);
-  const touchPointers = useRef(new Map());
-  const pinchStart = useRef(null);
-  const draggingNodeRef = useRef(null);
   const {
     svgRef,
     nodes,
     walls,
-    rooms,
-    openings,
-    objects,
-    electricalRoutes,
-    plumbingRoutes,
     nodeMap,
     unit,
     tool,
@@ -44,6 +34,7 @@ export default function CadCanvas({ cad }) {
     onRoomPointerDown,
     isNodeLocked,
   } = cad;
+  const renderModel = useMemo(() => buildRenderModel(cad.project), [cad.project]);
   const layerStyle = (layer) => ({
     display: cad.layerSettings[layer].visible ? undefined : "none",
     opacity: cad.activeLayer && cad.activeLayer !== layer ? 0.18 : 1,
@@ -86,48 +77,7 @@ export default function CadCanvas({ cad }) {
     return { x: current.x + (current.width - width) / 2, y: current.y + (current.height - height) / 2, width, height };
   });
 
-  const clientToWorld = (clientX, clientY) => {
-    const svg = svgRef.current;
-    const matrix = svg?.getScreenCTM?.();
-    if (!svg || !matrix) return null;
-    const point = svg.createSVGPoint();
-    point.x = clientX;
-    point.y = clientY;
-    const world = point.matrixTransform(matrix.inverse());
-    return { x: world.x, y: world.y };
-  };
-
-  const worldToClient = (point) => {
-    const svg = svgRef.current;
-    const matrix = svg?.getScreenCTM?.();
-    if (!svg || !matrix) return null;
-    const svgPoint = svg.createSVGPoint();
-    svgPoint.x = point.x;
-    svgPoint.y = point.y;
-    const screen = svgPoint.matrixTransform(matrix);
-    return { x: screen.x, y: screen.y };
-  };
-
-  const handlePointerDownCapture = (event) => {
-    if (event.pointerType !== "touch") return;
-    touchPointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (touchPointers.current.size !== 2) return;
-    const [first, second] = [...touchPointers.current.values()];
-    const centerClient = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-    const centerWorld = clientToWorld(centerClient.x, centerClient.y);
-    pinchStart.current = {
-      distance: Math.hypot(second.x - first.x, second.y - first.y) || 1,
-      centerClient,
-      centerWorld,
-      view,
-    };
-    panStart.current = null;
-    draggingNodeRef.current = null;
-    onCanvasPointerUp();
-  };
-
   const handlePointerDown = (event) => {
-    if (pinchStart.current) return;
     if (panMode || event.button === 1) {
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -138,26 +88,6 @@ export default function CadCanvas({ cad }) {
   };
 
   const handlePointerMove = (event) => {
-    if (event.pointerType === "touch" && touchPointers.current.has(event.pointerId)) {
-      touchPointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    }
-    if (pinchStart.current && touchPointers.current.size >= 2) {
-      const [first, second] = [...touchPointers.current.values()];
-      const currentDistance = Math.hypot(second.x - first.x, second.y - first.y) || 1;
-      const currentCenter = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-      const factor = pinchStart.current.distance / currentDistance;
-      const width = Math.max(72, Math.min(WORKSPACE.width * 3, pinchStart.current.view.width * factor));
-      const height = Math.max(48, Math.min(WORKSPACE.height * 3, pinchStart.current.view.height * factor));
-      const rect = svgRef.current?.getBoundingClientRect();
-      const dx = rect ? ((currentCenter.x - pinchStart.current.centerClient.x) / Math.max(1, rect.width)) * width : 0;
-      const dy = rect ? ((currentCenter.y - pinchStart.current.centerClient.y) / Math.max(1, rect.height)) * height : 0;
-      const centerWorld = pinchStart.current.centerWorld || {
-        x: pinchStart.current.view.x + pinchStart.current.view.width / 2,
-        y: pinchStart.current.view.y + pinchStart.current.view.height / 2,
-      };
-      setView({ x: centerWorld.x - width / 2 - dx, y: centerWorld.y - height / 2 - dy, width, height });
-      return;
-    }
     if (panStart.current) {
       const rect = cad.svgRef.current.getBoundingClientRect();
       const dx = ((event.clientX - panStart.current.clientX) / rect.width) * panStart.current.view.width;
@@ -165,35 +95,12 @@ export default function CadCanvas({ cad }) {
       setView({ ...panStart.current.view, x: panStart.current.view.x - dx, y: panStart.current.view.y - dy });
       return;
     }
-    if (draggingNodeRef.current != null && cad.angleSnap) {
-      const draggedId = draggingNodeRef.current;
-      const rawPoint = clientToWorld(event.clientX, event.clientY);
-      const connected = walls.find((wall) => wall.startNodeId === draggedId || wall.endNodeId === draggedId);
-      const anchorId = connected ? (connected.startNodeId === draggedId ? connected.endNodeId : connected.startNodeId) : null;
-      const anchor = anchorId != null ? nodeMap.get(anchorId) : null;
-      if (rawPoint && anchor) {
-        const snapped = snapAngle(anchor, rawPoint);
-        const screen = worldToClient(snapped);
-        if (screen) {
-          onCanvasPointerMove({ clientX: screen.x, clientY: screen.y });
-          return;
-        }
-      }
-    }
     onCanvasPointerMove(event);
   };
 
-  const handlePointerUp = (event) => {
-    if (event?.pointerType === "touch") touchPointers.current.delete(event.pointerId);
-    if (touchPointers.current.size < 2) pinchStart.current = null;
+  const handlePointerUp = () => {
     panStart.current = null;
-    draggingNodeRef.current = null;
     onCanvasPointerUp();
-  };
-
-  const handleNodePointerDown = (nodeId) => (event) => {
-    if (tool === "select" && !isNodeLocked(nodeId)) draggingNodeRef.current = nodeId;
-    onNodePointerDown(nodeId)(event);
   };
 
   return (
@@ -204,7 +111,6 @@ export default function CadCanvas({ cad }) {
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        onPointerDownCapture={handlePointerDownCapture}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -224,13 +130,7 @@ export default function CadCanvas({ cad }) {
         </defs>
         <rect width={WORKSPACE.width} height={WORKSPACE.height} fill="url(#major-grid)" />
 
-        {rooms.map((room) => {
-          const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
-          if (points.length < 3) return null;
-          const center = {
-            x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-            y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
-          };
+        {renderModel.rooms.map(({ source: room, points, center }) => {
           return (
             <g key={room.id} style={layerStyle("architecture")}>
               <polygon onPointerDown={onRoomPointerDown(room.id)} points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill={room.classification === "void" ? "#A8A8A2" : room.color || "#B9D8C2"} fillOpacity={room.classification === "void" ? "0.5" : "0.34"} stroke={room.id === selectedRoomId ? "#2F78C4" : room.classification === "void" ? "#777770" : "none"} strokeWidth={room.id === selectedRoomId ? "2" : "1"} strokeDasharray={room.classification === "void" ? "5 3" : undefined} style={{ cursor: tool === "select" ? "pointer" : "default" }} />
@@ -242,20 +142,27 @@ export default function CadCanvas({ cad }) {
           );
         })}
 
-        {walls.map((wall) => {
-          const start = nodeMap.get(wall.startNodeId);
-          const end = nodeMap.get(wall.endNodeId);
-          if (!start || !end) return null;
+        {renderModel.walls.map(({ source: wall, start, end, midpoint }) => {
           const selected = wall.id === selectedWallId;
-          const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
           return (
             <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ ...layerStyle("architecture"), cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
               <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="14" />
-              <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={selected ? "#2F78C4" : wall.locked ? "#5B6B78" : "#1B2B3A"} strokeWidth={Math.max(2.5, wall.thicknessInches)} strokeLinecap="square" style={{ pointerEvents: "none" }} />
+              <line
+                x1={start.x}
+                y1={start.y}
+                x2={end.x}
+                y2={end.y}
+                stroke={selected ? "#2F78C4" : wall.locked ? "#5B6B78" : "#1B2B3A"}
+                strokeWidth={Math.max(2.5, wall.thicknessInches)}
+                strokeLinecap="square"
+                style={{ pointerEvents: "none" }}
+              />
               {cad.layerSettings.dimensions.visible && (selected || tool === "wall") && (
                 <g style={{ pointerEvents: "none" }}>
                   <rect x={midpoint.x - 25} y={midpoint.y - 10} width="50" height="16" rx="3" fill="#FBF8F1" opacity="0.92" />
-                  <text x={midpoint.x} y={midpoint.y + 2} textAnchor="middle" fontSize="8" fill="#5B6B78" className="mono">{lengthToDisplay(distance(start, end), unit, unit === "imperial")}</text>
+                  <text x={midpoint.x} y={midpoint.y + 2} textAnchor="middle" fontSize="8" fill="#5B6B78" className="mono">
+                    {lengthToDisplay(distance(start, end), unit, unit === "imperial")}
+                  </text>
                   {wall.locked && <Lock x={midpoint.x + 18} y={midpoint.y - 7} size={9} color="#B8863E" />}
                 </g>
               )}
@@ -264,15 +171,20 @@ export default function CadCanvas({ cad }) {
         })}
 
         {activeNodeId != null && pointer && nodeMap.get(activeNodeId) && (
-          <line x1={nodeMap.get(activeNodeId).x} y1={nodeMap.get(activeNodeId).y} x2={pointer.x} y2={pointer.y} stroke="#B8863E" strokeWidth="2" strokeDasharray="6 4" style={{ ...layerStyle("architecture"), pointerEvents: "none" }} />
+          <line
+            x1={nodeMap.get(activeNodeId).x}
+            y1={nodeMap.get(activeNodeId).y}
+            x2={pointer.x}
+            y2={pointer.y}
+            stroke="#B8863E"
+            strokeWidth="2"
+            strokeDasharray="6 4"
+            style={{ ...layerStyle("architecture"), pointerEvents: "none" }}
+          />
         )}
 
-        {openings.map((opening) => {
-          const wall = walls.find((item) => item.id === opening.wallId);
-          const start = wall && nodeMap.get(wall.startNodeId);
-          const end = wall && nodeMap.get(wall.endNodeId);
-          if (!wall || !start || !end) return null;
-          const span = openingSpan(start, end, opening.t, opening.widthInches);
+        {renderModel.openings.map(({ source: opening, wall: resolvedWall, span }) => {
+          const wall = resolvedWall.source;
           const normal = { x: -span.direction.y, y: span.direction.x };
           const selected = selectedOpeningIds.includes(opening.id);
           if (opening.type === "window") {
@@ -308,35 +220,21 @@ export default function CadCanvas({ cad }) {
           );
         })}
 
-        {electricalRoutes.map((route) => {
-          const points = electricalRoutePoints(route, objects, walls, nodeMap);
-          const circuit = cad.electricalCircuits.find((item) => item.id === route.circuitId);
-          if (points.length < 2) return null;
+        {renderModel.electricalRoutes.map(({ source: route, points, circuit }) => {
           return <g key={route.id} style={{ ...layerStyle("electrical"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={circuit?.colour || "#D26A3D"} strokeWidth="1.5" strokeDasharray="5 3" /><text x={points[1].x} y={points[1].y - 3} fontSize="6" fill={circuit?.colour || "#D26A3D"} className="mono">{circuit?.name || "WIRE"}</text></g>;
         })}
 
-        {plumbingRoutes.map((route) => {
-          const points = plumbingRoutePoints(route, objects, walls, nodeMap);
-          const system = PIPE_SYSTEMS[route.system] || PIPE_SYSTEMS.cold;
-          if (points.length < 2) return null;
+        {renderModel.plumbingRoutes.map(({ source: route, points, system }) => {
           return <g key={route.id} style={{ ...layerStyle("plumbing"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={system.colour} strokeWidth={Math.max(1.5, route.diameterMm / 10)} strokeDasharray={system.dash || undefined} /><text x={points[1].x + 3} y={points[1].y - 3} fontSize="6" fill={system.colour} className="mono">{system.label} Ø{route.diameterMm}</text></g>;
         })}
 
-        {objects.map((object) => {
-          const preset = OBJECT_CATALOG[object.kind] || {};
+        {renderModel.objects.map(({ source: object, preset, x, y, rotation, layer: objectLayer }) => {
           const selected = cad.selectedObjectIds.includes(object.id);
           const warning = cad.warningObjectIds.includes(object.id);
-          const objectLayer = object.category === "Electrical" || object.category === "Lighting" ? "electrical" : object.category === "Plumbing" ? "plumbing" : "furniture";
           if (object.mount === "wall") {
-            const wall = walls.find((item) => item.id === object.wallId);
-            const start = wall && nodeMap.get(wall.startNodeId);
-            const end = wall && nodeMap.get(wall.endNodeId);
-            if (!start || !end) return null;
-            const center = { x: start.x + (end.x - start.x) * object.t, y: start.y + (end.y - start.y) * object.t };
-            const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
             const width = object.kind === "radiator" ? object.widthInches : 16;
             return (
-              <g key={object.id} transform={`translate(${center.x} ${center.y}) rotate(${angle})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "pointer" }}>
+              <g key={object.id} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "pointer" }}>
                 <rect x={-width / 2} y="-8" width={width} height="16" rx="2" fill="#FBF8F1" stroke={selected ? "#2F78C4" : object.category === "Electrical" ? "#D26A3D" : "#8A6D4B"} strokeWidth={selected ? 2 : 1.5} />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="6" fontWeight="600" fill="#1B2B3A" className="mono">{preset.symbol}</text>
               </g>
@@ -344,7 +242,7 @@ export default function CadCanvas({ cad }) {
           }
           if (object.mount === "floor") {
             return (
-              <g key={object.id} transform={`translate(${object.x} ${object.y}) rotate(${object.rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
+              <g key={object.id} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
                 {(selected || warning) && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke={warning ? "#B2483A" : "#2F78C4"} strokeWidth="2" strokeDasharray="4 3" />}
                 <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill={warning ? "#E8B7AE" : "#D7C7A7"} fillOpacity="0.82" stroke={warning ? "#B2483A" : "#7A6F5C"} strokeWidth="1.5" />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="7" fill="#1B2B3A" className="mono" style={{ pointerEvents: "none" }}>{object.name}</text>
@@ -352,7 +250,7 @@ export default function CadCanvas({ cad }) {
             );
           }
           return (
-            <g key={object.id} transform={`translate(${object.x} ${object.y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
+            <g key={object.id} transform={`translate(${x} ${y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
               <circle r={selected ? 11 : 9} fill="#FBF8F1" stroke={selected ? "#2F78C4" : "#D4A72C"} strokeWidth="2" />
               <line x1="-6" y1="0" x2="6" y2="0" stroke="#D4A72C" strokeWidth="1.5" />
               <line x1="0" y1="-6" x2="0" y2="6" stroke="#D4A72C" strokeWidth="1.5" />
@@ -361,13 +259,25 @@ export default function CadCanvas({ cad }) {
           );
         })}
 
-        {nodes.filter((node) => visibleNodeIds.has(node.id)).map((node) => {
-          const locked = isNodeLocked(node.id);
-          const active = node.id === activeNodeId;
-          return (
-            <circle key={node.id} cx={node.x} cy={node.y} r={active ? 6 : 4.5} fill={locked ? "#5B6B78" : active ? "#B8863E" : "#FBF8F1"} stroke={active ? "#1B2B3A" : "#B8863E"} strokeWidth="1.5" onPointerDown={handleNodePointerDown(node.id)} style={{ ...layerStyle("architecture"), cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }} />
-          );
-        })}
+        {nodes
+          .filter((node) => visibleNodeIds.has(node.id))
+          .map((node) => {
+            const locked = isNodeLocked(node.id);
+            const active = node.id === activeNodeId;
+            return (
+              <circle
+                key={node.id}
+                cx={node.x}
+                cy={node.y}
+                r={active ? 6 : 4.5}
+                fill={locked ? "#5B6B78" : active ? "#B8863E" : "#FBF8F1"}
+                stroke={active ? "#1B2B3A" : "#B8863E"}
+                strokeWidth="1.5"
+                onPointerDown={onNodePointerDown(node.id)}
+                style={{ ...layerStyle("architecture"), cursor: locked && tool !== "wall" ? "not-allowed" : tool === "wall" ? "crosshair" : "move" }}
+              />
+            );
+          })}
       </svg>
 
       <div className="pointer-events-none absolute left-1/2 top-3 hidden -translate-x-1/2 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-3 py-1.5 text-center text-[10px] text-[#5B6B78] shadow-sm sm:block">
@@ -385,15 +295,21 @@ export default function CadCanvas({ cad }) {
       </div>
 
       {previewMeasurement && (
-        <div className="mono absolute bottom-3 left-3 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-2 py-1 text-[10px] text-[#5B6B78] shadow-sm">{lengthToDisplay(previewMeasurement.length, unit, unit === "imperial")} · {previewMeasurement.angle.toFixed(0)}°</div>
+        <div className="mono absolute bottom-3 left-3 rounded-md border border-[#D8CCB0] bg-[#FBF8F1]/95 px-2 py-1 text-[10px] text-[#5B6B78] shadow-sm">
+          {lengthToDisplay(previewMeasurement.length, unit, unit === "imperial")} · {previewMeasurement.angle.toFixed(0)}°
+        </div>
       )}
 
       {cad.drawingWarnings.length > 0 && (
-        <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">{cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}</div>
+        <div className="absolute left-3 top-3 max-w-xs rounded-md border border-[#E0954A] bg-[#FFF7E8]/95 px-2 py-1 text-[10px] text-[#8B5A24] shadow-sm">
+          {cad.drawingWarnings[0]}{cad.drawingWarnings.length > 1 ? ` (+${cad.drawingWarnings.length - 1} more)` : ""}
+        </div>
       )}
 
       {cad.designWarnings.length > 0 && (
-        <div className="absolute bottom-3 right-3 max-w-xs rounded-md border border-[#B2483A] bg-[#FFF1EE]/95 px-2 py-1 text-[10px] text-[#8D342A] shadow-sm">{cad.designWarnings[0]}{cad.designWarnings.length > 1 ? ` (+${cad.designWarnings.length - 1} more)` : ""}</div>
+        <div className="absolute bottom-3 right-3 max-w-xs rounded-md border border-[#B2483A] bg-[#FFF1EE]/95 px-2 py-1 text-[10px] text-[#8D342A] shadow-sm">
+          {cad.designWarnings[0]}{cad.designWarnings.length > 1 ? ` (+${cad.designWarnings.length - 1} more)` : ""}
+        </div>
       )}
 
       {walls.length === 0 && (

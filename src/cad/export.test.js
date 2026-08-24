@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCadDxf, buildCadSvg, parseProject, serializeProject } from "./export.js";
+import { buildCadDxf, buildCadSvg, buildContractorScheduleCsv, buildContractorScheduleSvg, contractorScheduleRows, parseProject, serializeProject } from "./export.js";
 import { createEmptyProject } from "./project.js";
+import { buildRenderModel } from "./renderModel.js";
 
 const project = createEmptyProject({
   nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 120, y: 0 }],
@@ -65,4 +66,20 @@ test("plumbing services preserve system and diameter in project exports", () => 
 test("unplaced procurement items remain in editable project files", () => {
   const specified = { ...project, shoppingItems: [{ id: 10, name: "Paint", quantity: 3, unitPricePence: 4200 }] };
   assert.deepEqual(parseProject(serializeProject(specified)), specified);
+});
+
+test("SVG entity output has parity with the shared render model", () => {
+  const model = buildRenderModel(project);
+  const svg = buildCadSvg(project);
+  assert.equal((svg.match(/data-entity="wall"/g) || []).length, model.walls.length);
+  assert.equal((svg.match(/data-entity="door"/g) || []).length, model.openings.length);
+  assert.equal((svg.match(/data-entity="object"/g) || []).length, model.objects.length);
+});
+
+test("contractor schedules include metric wall and opening dimensions", () => {
+  const rows = contractorScheduleRows(project);
+  assert.ok(rows.some((row) => row.schedule === "Walls" && /mm/.test(row.size)));
+  assert.ok(rows.some((row) => row.schedule === "Doors" && row.size === "914 mm"));
+  assert.match(buildContractorScheduleCsv(project), /Schedule,Reference,Item/);
+  assert.match(buildContractorScheduleSvg(project), /contractor schedules/);
 });

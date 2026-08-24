@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { buildJpegPdf, computePrintPlan, PAPER_SIZES, PRINT_SCALES, renderPrintPdf } from "../lib/pdfExport";
 import { saveOrShareFile } from "../lib/nativeExport";
-import { buildCadDxf, buildCadSvg, parseProject, serializeProject } from "./export";
+import { buildCadDxf, buildCadSvg, buildContractorScheduleCsv, buildContractorScheduleSvg, parseProject, serializeProject } from "./export";
 
 async function svgToCanvas(svg, multiplier = 2) {
   const parsed = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
@@ -59,6 +59,16 @@ export default function ExportPanel({ cad }) {
   const exportSvg = () => saveOrShareFile(new Blob([buildCadSvg(project)], { type: "image/svg+xml" }), "reno-lite-plan.svg");
   const exportDxf = () => saveOrShareFile(new Blob([buildCadDxf(project)], { type: "application/dxf" }), "reno-lite-plan.dxf");
   const exportProject = () => saveOrShareFile(new Blob([serializeProject(project)], { type: "application/json" }), "reno-lite-project.json");
+  const exportScheduleCsv = () => saveOrShareFile(new Blob([buildContractorScheduleCsv(project)], { type: "text/csv" }), "reno-lite-contractor-schedules.csv");
+  const exportSchedulePdf = async () => {
+    const canvas = await svgToCanvas(buildContractorScheduleSvg(project), 2);
+    const base64 = canvas.toDataURL("image/jpeg", 0.94).split(",")[1];
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const width = 842;
+    const height = width * canvas.height / canvas.width;
+    await saveOrShareFile(buildJpegPdf(bytes, canvas.width, canvas.height, width, height), "reno-lite-contractor-schedules.pdf");
+  };
   const exportPng = async () => {
     const canvas = await svgToCanvas(buildCadSvg(project));
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
@@ -116,6 +126,14 @@ export default function ExportPanel({ cad }) {
         <button disabled={busy != null || cad.walls.length === 0} onClick={() => run("print", exportPrintPdf)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-[#B8863E] py-1.5 text-xs text-[#FBF8F1] disabled:opacity-40"><Download size={12} /> {busy === "print" ? "Preparing…" : "True-scale PDF"}</button>
       </div>
       <button onClick={() => run("project", exportProject)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#B8863E] py-1.5 text-xs text-[#B8863E]"><Download size={12} /> Save editable project</button>
+      <div className="mt-3 rounded-lg border border-[#D8CCB0] bg-[#FBF8F1] p-3">
+        <p className="mono mb-1 text-[10px] uppercase tracking-wider text-[#5B6B78]">Contractor schedules</p>
+        <p className="mb-2 text-[10px] leading-4 text-[#8A97A3]">Rooms, verified wall dimensions, openings, circuits and pipe routes.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button disabled={busy != null} onClick={() => run("schedule-csv", exportScheduleCsv)} className="flex items-center justify-center gap-1 rounded border border-[#D8CCB0] py-1.5 text-[10px] text-[#5E86A8] disabled:opacity-40"><Download size={11} /> Schedule CSV</button>
+          <button disabled={busy != null} onClick={() => run("schedule-pdf", exportSchedulePdf)} className="flex items-center justify-center gap-1 rounded border border-[#D8CCB0] py-1.5 text-[10px] text-[#5E86A8] disabled:opacity-40"><Download size={11} /> Schedule PDF</button>
+        </div>
+      </div>
       <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importProject} />
       <button onClick={() => importRef.current?.click()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]"><Upload size={12} /> Open project file</button>
       <button onClick={() => { if (window.confirm("Start a new project? The current drawing can still be restored with Undo until this page is closed.")) cad.clearProject(); }} className="mt-2 w-full rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]">Start new project</button>
