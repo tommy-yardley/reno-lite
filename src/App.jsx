@@ -25,7 +25,7 @@ export default function App() {
         .serif { font-family: 'Zilla Slab', serif; }
       `}</style>
 
-      <header className="flex h-14 items-center gap-2 border-b border-[#D8CCB0] bg-[#F3EEE3]/95 px-3 sm:gap-3 sm:px-4">
+      <header className="app-header flex h-14 items-center gap-2 border-b border-[#D8CCB0] bg-[#F3EEE3]/95 px-3 sm:gap-3 sm:px-4">
         <Ruler size={22} color="#B8863E" />
         <div className="min-w-0 flex-1 sm:max-w-64">
           <h1 className="serif text-base font-bold sm:hidden">RENO<span className="text-[#B8863E]">LITE</span></h1>
@@ -43,7 +43,7 @@ export default function App() {
         <button onClick={cad.redo} disabled={!cad.canRedo} title="Redo" className="rounded border border-[#D8CCB0] p-2 text-[#5E86A8] disabled:opacity-30"><Redo2 size={16} /></button>
       </header>
 
-      <main className="grid h-[calc(100dvh-56px)] min-h-0 grid-rows-[minmax(260px,56dvh)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-1">
+      <main className="workspace-grid grid h-[calc(100dvh-56px)] min-h-0 grid-rows-[minmax(260px,56dvh)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-1">
         <div className="min-h-0 min-w-0 p-2 sm:p-3 lg:p-4"><CadCanvas cad={cad} /></div>
         <div className="min-h-0 border-t border-[#D8CCB0] lg:border-l lg:border-t-0"><CadSidebar cad={cad} /></div>
       </main>

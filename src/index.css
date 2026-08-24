@@ -16,6 +16,7 @@ html, body, #root {
 body {
   margin: 0;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 button,
@@ -27,4 +28,40 @@ textarea {
 
 svg text {
   user-select: none;
+}
+
+:focus-visible {
+  outline: 2px solid #2f78c4;
+  outline-offset: 2px;
+}
+
+.app-header {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+@media (pointer: coarse) and (max-width: 1023px) {
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+    min-height: 42px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@media (max-width: 1023px) and (orientation: landscape) {
+  .workspace-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 42vw);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .workspace-grid > :last-child {
+    border-left: 1px solid #d8ccb0;
+    border-top: 0;
+  }
 }
