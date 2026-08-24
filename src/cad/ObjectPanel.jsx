@@ -54,6 +54,7 @@ export default function ObjectPanel({ cad }) {
       {selected && (
         <div className="mt-3 space-y-2 rounded-lg border border-[#6FA98C] bg-[#FBF8F1] p-3">
           <input value={selected.name} onChange={(event) => cad.updateObject(selected.id, { name: event.target.value })} className="w-full bg-transparent text-sm font-medium" />
+          <label className="block text-[10px] text-[#5B6B78]">Renovation status<select value={selected.renovationStatus || "proposed"} onChange={(event) => cad.updateObject(selected.id, { renovationStatus: event.target.value })} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-xs"><option value="existing">Existing / retain</option><option value="proposed">Proposed / add</option><option value="demolish">Remove</option></select></label>
           {selected.mount === "wall" && (
             <label className="block text-[10px] text-[#5B6B78]">
               Position along wall

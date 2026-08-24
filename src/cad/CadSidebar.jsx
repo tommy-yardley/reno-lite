@@ -42,19 +42,20 @@ export default function CadSidebar({ cad }) {
 
   useEffect(() => {
     if (cad.selectedWallId || cad.selectedOpeningId || cad.selectedRoomId) setActiveTab("inspect");
-    else if (cad.selectedObjectId) setActiveTab("design");
+    else if (cad.selectedObjectId) setActiveTab("furnish");
   }, [cad.selectedWallId, cad.selectedOpeningId, cad.selectedRoomId, cad.selectedObjectId]);
 
   const tabs = [
     ["draw", "Draw"],
     ["inspect", "Inspect"],
-    ["design", "Design"],
-    ["export", "Export"],
+    ["furnish", "Furnish"],
+    ["services", "Services"],
+    ["output", "Output"],
   ];
 
   return (
     <aside className="flex h-full min-h-0 flex-col bg-[#F3EEE3]/95">
-      <nav className="grid shrink-0 grid-cols-4 border-b border-[#D8CCB0] bg-[#FBF8F1] p-1" aria-label="Workspace panels">
+      <nav className="grid shrink-0 grid-cols-5 border-b border-[#D8CCB0] bg-[#FBF8F1] p-1" aria-label="Workspace panels">
         {tabs.map(([value, label]) => (
           <button key={value} onClick={() => setActiveTab(value)} className="rounded px-1 py-2 text-[11px] font-medium transition-colors" style={activeTab === value ? { background: "#1B2B3A", color: "#FBF8F1" } : { color: "#5E86A8" }} aria-current={activeTab === value ? "page" : undefined}>{label}</button>
         ))}
@@ -113,17 +114,17 @@ export default function CadSidebar({ cad }) {
         )}
       </section>}
 
-      {activeTab === "design" && <LayerPanel cad={cad} />}
+      {(activeTab === "furnish" || activeTab === "services") && <LayerPanel cad={cad} />}
 
-      {activeTab === "design" && <ObjectPanel cad={cad} />}
+      {activeTab === "furnish" && <ObjectPanel cad={cad} />}
 
-      {activeTab === "design" && <ElectricalPanel cad={cad} />}
+      {activeTab === "services" && <ElectricalPanel cad={cad} />}
 
-      {activeTab === "design" && <PlumbingPanel cad={cad} />}
+      {activeTab === "services" && <PlumbingPanel cad={cad} />}
 
-      {activeTab === "design" && <ShoppingPanel cad={cad} />}
+      {activeTab === "output" && <ShoppingPanel cad={cad} />}
 
-      {activeTab === "design" && cad.designWarnings.length > 0 && (
+      {(activeTab === "furnish" || activeTab === "services") && cad.designWarnings.length > 0 && (
         <section>
           <h2 className="mono mb-2 text-[11px] uppercase tracking-widest text-[#B2483A]">Layout checks</h2>
           <ul className="space-y-1 rounded-lg border border-[#E2A198] bg-[#FFF1EE] p-3 text-[10px] leading-4 text-[#8D342A]">
@@ -132,7 +133,7 @@ export default function CadSidebar({ cad }) {
         </section>
       )}
 
-      {activeTab === "export" && <ExportPanel cad={cad} />}
+      {activeTab === "output" && <ExportPanel cad={cad} />}
 
       {activeTab === "inspect" && cad.selectedOpening && (
         <section>
@@ -155,6 +156,7 @@ export default function CadSidebar({ cad }) {
             <div className="grid grid-cols-3 gap-1">
               {(cad.selectedOpening.type === "window" ? [600, 900, 1200] : [762, 826, 926]).map((millimetres) => <button key={millimetres} onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { widthInches: millimetres / 25.4 })} className="rounded border border-[#D8CCB0] py-1 text-[10px] text-[#5E86A8]">{millimetres} mm</button>)}
             </div>
+            <label className="block text-[10px] text-[#5B6B78]">Renovation status<select value={cad.selectedOpening.renovationStatus || "existing"} onChange={(event) => cad.updateOpenings(cad.selectedOpeningIds, { renovationStatus: event.target.value })} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-xs"><option value="existing">Existing / retain</option><option value="proposed">Proposed / add</option><option value="demolish">Remove</option></select></label>
             {cad.selectedOpeningIds.length === 1 && <label className="block text-[10px] text-[#5B6B78]">Opening type<select value={cad.selectedOpening.variant || (cad.selectedOpening.type === "door" ? "standard" : "casement")} onChange={(event) => cad.updateOpening(cad.selectedOpening.id, { variant: event.target.value })} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-xs">{(cad.selectedOpening.type === "door" ? [["standard", "Standard hinged"], ["double", "Double / French"], ["sliding", "Sliding"], ["cased", "Cased opening"]] : [["casement", "Casement"], ["fixed", "Fixed"], ["sash", "Sash"], ["bay", "Bay"]]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
             {cad.selectedOpening.type === "door" && (
               <div className="grid grid-cols-2 gap-2"><button onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { swing: cad.selectedOpening.swing * -1 })} className="rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip swing</button><button onClick={() => cad.updateOpenings(cad.selectedOpeningIds, { hingeSide: cad.selectedOpening.hingeSide === "end" ? "start" : "end" })} className="rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]">Flip hinge</button></div>
@@ -259,6 +261,7 @@ export default function CadSidebar({ cad }) {
                 className="mono w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-sm"
               />
             </div>
+            <label className="block text-[11px] text-[#5B6B78]">Renovation status<select value={selectedWall.renovationStatus || "existing"} onChange={(event) => cad.updateWall(selectedWall.id, { renovationStatus: event.target.value })} className="mt-1 w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-xs"><option value="existing">Existing / retain</option><option value="proposed">Proposed / add</option><option value="demolish">Remove</option></select></label>
             <button onClick={() => cad.toggleWallLock(selectedWall.id)} className="flex w-full items-center justify-center gap-2 rounded py-2 text-xs font-medium" style={{ background: selectedWall.locked ? "#5B6B78" : "#E8DFC9", color: selectedWall.locked ? "#FBF8F1" : "#1B2B3A" }}>
               {selectedWall.locked ? <Lock size={14} /> : <LockOpen size={14} />}
               {selectedWall.locked ? "Wall locked" : "Lock wall and anchors"}

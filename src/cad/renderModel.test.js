@@ -4,6 +4,7 @@ import { createEmptyProject } from "./project.js";
 import { buildRenderModel } from "./renderModel.js";
 
 const project = createEmptyProject({
+  renovationView: "proposed",
   nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 120, y: 0 }],
   walls: [{ id: 3, startNodeId: 1, endNodeId: 2, thicknessInches: 4.5 }],
   openings: [{ id: 4, wallId: 3, type: "window", t: 0.5, widthInches: 36 }],
@@ -52,4 +53,18 @@ test("drawing bounds include the physical footprint of free objects", () => {
   }));
   assert.ok(model.bounds.minX <= 450);
   assert.ok(model.bounds.minX + model.bounds.width >= 550);
+});
+
+test("renovation views filter removals and proposed additions consistently", () => {
+  const phased = createEmptyProject({
+    renovationView: "proposed",
+    nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 100, y: 0 }, { id: 3, x: 0, y: 40 }],
+    walls: [
+      { id: 4, startNodeId: 1, endNodeId: 2, renovationStatus: "demolish" },
+      { id: 5, startNodeId: 1, endNodeId: 3, renovationStatus: "proposed" },
+    ],
+  });
+  assert.deepEqual(buildRenderModel(phased).walls.map(({ id }) => id), [5]);
+  const changes = buildRenderModel({ ...phased, renovationView: "changes" });
+  assert.equal(changes.walls.find(({ id }) => id === 4).appearance.colour, "#B2483A");
 });

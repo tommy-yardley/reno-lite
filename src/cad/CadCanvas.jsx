@@ -142,7 +142,7 @@ export default function CadCanvas({ cad }) {
           );
         })}
 
-        {renderModel.walls.map(({ source: wall, start, end, midpoint }) => {
+        {renderModel.walls.map(({ source: wall, start, end, midpoint, appearance }) => {
           const selected = wall.id === selectedWallId;
           return (
             <g key={wall.id} onPointerDown={onWallPointerDown(wall.id)} style={{ ...layerStyle("architecture"), cursor: tool === "select" ? (wall.locked ? "not-allowed" : "move") : tool === "wall" ? "crosshair" : "pointer" }}>
@@ -152,9 +152,11 @@ export default function CadCanvas({ cad }) {
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
-                stroke={selected ? "#2F78C4" : wall.locked ? "#5B6B78" : "#1B2B3A"}
+                stroke={selected ? "#2F78C4" : appearance.colour || (wall.locked ? "#5B6B78" : "#1B2B3A")}
                 strokeWidth={Math.max(2.5, wall.thicknessInches)}
                 strokeLinecap="square"
+                strokeDasharray={appearance.dash}
+                opacity={appearance.opacity}
                 style={{ pointerEvents: "none" }}
               />
               {cad.layerSettings.dimensions.visible && (selected || tool === "wall") && (
@@ -183,13 +185,13 @@ export default function CadCanvas({ cad }) {
           />
         )}
 
-        {renderModel.openings.map(({ source: opening, wall: resolvedWall, span }) => {
+        {renderModel.openings.map(({ source: opening, wall: resolvedWall, span, appearance }) => {
           const wall = resolvedWall.source;
           const normal = { x: -span.direction.y, y: span.direction.x };
           const selected = selectedOpeningIds.includes(opening.id);
           if (opening.type === "window") {
             return (
-              <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
+              <g key={opening.id} opacity={appearance.opacity} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
                 <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke={selected ? "#2F78C4" : "#5E86A8"} strokeWidth="3" />
                 <line x1={span.start.x + normal.x * 4} y1={span.start.y + normal.y * 4} x2={span.end.x + normal.x * 4} y2={span.end.y + normal.y * 4} stroke="#5E86A8" strokeWidth="1" />
@@ -207,7 +209,7 @@ export default function CadCanvas({ cad }) {
           const leafEnd = { x: hinge.x + leafDirection.x * span.width * opening.swing, y: hinge.y + leafDirection.y * span.width * opening.swing };
           const sweep = opening.swing > 0 ? 1 : 0;
           return (
-            <g key={opening.id} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
+            <g key={opening.id} opacity={appearance.opacity} onPointerDown={onOpeningPointerDown(opening.id)} style={{ ...layerStyle("architecture"), cursor: "pointer" }}>
               <line x1={span.start.x} y1={span.start.y} x2={span.end.x} y2={span.end.y} stroke="#FBF8F1" strokeWidth={Math.max(8, wall.thicknessInches + 3)} />
               <line x1={hinge.x} y1={hinge.y} x2={leafEnd.x} y2={leafEnd.y} stroke={selected ? "#2F78C4" : "#B8863E"} strokeWidth="2" />
               <path d={`M ${closedEnd.x} ${closedEnd.y} A ${span.width} ${span.width} 0 0 ${opening.hingeSide === "end" ? 1 - sweep : sweep} ${leafEnd.x} ${leafEnd.y}`} fill="none" stroke="#B8863E" strokeWidth="1" strokeDasharray="3 3" />
@@ -228,13 +230,13 @@ export default function CadCanvas({ cad }) {
           return <g key={route.id} style={{ ...layerStyle("plumbing"), pointerEvents: "none" }}><polyline points={points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke={system.colour} strokeWidth={Math.max(1.5, route.diameterMm / 10)} strokeDasharray={system.dash || undefined} /><text x={points[1].x + 3} y={points[1].y - 3} fontSize="6" fill={system.colour} className="mono">{system.label} Ø{route.diameterMm}</text></g>;
         })}
 
-        {renderModel.objects.map(({ source: object, preset, x, y, rotation, layer: objectLayer }) => {
+        {renderModel.objects.map(({ source: object, preset, x, y, rotation, layer: objectLayer, appearance }) => {
           const selected = cad.selectedObjectIds.includes(object.id);
           const warning = cad.warningObjectIds.includes(object.id);
           if (object.mount === "wall") {
             const width = object.kind === "radiator" ? object.widthInches : 16;
             return (
-              <g key={object.id} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "pointer" }}>
+              <g key={object.id} opacity={appearance.opacity} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "pointer" }}>
                 <rect x={-width / 2} y="-8" width={width} height="16" rx="2" fill="#FBF8F1" stroke={selected ? "#2F78C4" : object.category === "Electrical" ? "#D26A3D" : "#8A6D4B"} strokeWidth={selected ? 2 : 1.5} />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="6" fontWeight="600" fill="#1B2B3A" className="mono">{preset.symbol}</text>
               </g>
@@ -242,7 +244,7 @@ export default function CadCanvas({ cad }) {
           }
           if (object.mount === "floor") {
             return (
-              <g key={object.id} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
+              <g key={object.id} opacity={appearance.opacity} transform={`translate(${x} ${y}) rotate(${rotation})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
                 {(selected || warning) && <rect x={-object.widthInches / 2 - 3} y={-object.depthInches / 2 - 3} width={object.widthInches + 6} height={object.depthInches + 6} fill="none" stroke={warning ? "#B2483A" : "#2F78C4"} strokeWidth="2" strokeDasharray="4 3" />}
                 <rect x={-object.widthInches / 2} y={-object.depthInches / 2} width={object.widthInches} height={object.depthInches} rx="3" fill={warning ? "#E8B7AE" : "#D7C7A7"} fillOpacity="0.82" stroke={warning ? "#B2483A" : "#7A6F5C"} strokeWidth="1.5" />
                 <text x="0" y="2.5" textAnchor="middle" fontSize="7" fill="#1B2B3A" className="mono" style={{ pointerEvents: "none" }}>{object.name}</text>
@@ -250,7 +252,7 @@ export default function CadCanvas({ cad }) {
             );
           }
           return (
-            <g key={object.id} transform={`translate(${x} ${y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
+            <g key={object.id} opacity={appearance.opacity} transform={`translate(${x} ${y})`} onPointerDown={onObjectPointerDown(object.id)} style={{ ...layerStyle(objectLayer), cursor: "move" }}>
               <circle r={selected ? 11 : 9} fill="#FBF8F1" stroke={selected ? "#2F78C4" : "#D4A72C"} strokeWidth="2" />
               <line x1="-6" y1="0" x2="6" y2="0" stroke="#D4A72C" strokeWidth="1.5" />
               <line x1="0" y1="-6" x2="0" y2="6" stroke="#D4A72C" strokeWidth="1.5" />

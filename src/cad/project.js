@@ -32,10 +32,11 @@ const cloneLayers = (layers = {}) =>
   );
 
 export function createEmptyProject(overrides = {}) {
-  return {
+  const project = {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "Untitled renovation",
+    renovationView: "existing",
     nodes: [],
     walls: [],
     rooms: [],
@@ -49,6 +50,14 @@ export function createEmptyProject(overrides = {}) {
     referenceImage: null,
     layerSettings: cloneLayers(),
     ...overrides,
+  };
+  return {
+    ...project,
+    walls: project.walls.map((wall) => ({ renovationStatus: "existing", ...wall })),
+    openings: project.openings.map((opening) => ({ renovationStatus: "existing", ...opening })),
+    objects: project.objects.map((object) => ({ renovationStatus: "proposed", ...object })),
+    electricalRoutes: project.electricalRoutes.map((route) => ({ renovationStatus: "proposed", ...route })),
+    plumbingRoutes: project.plumbingRoutes.map((route) => ({ renovationStatus: "proposed", ...route })),
   };
 }
 
@@ -148,6 +157,9 @@ export function normaliseProject(input, { validateReferences = true } = {}) {
   const migrated = migrateProject(input);
   const project = createEmptyProject({
     name: typeof migrated.name === "string" && migrated.name.trim() ? migrated.name.trim() : "Untitled renovation",
+    renovationView: ["existing", "proposed", "changes"].includes(migrated.renovationView)
+      ? migrated.renovationView
+      : "existing",
     unit: migrated.unit === "imperial" ? "imperial" : "metric",
     referenceImage: migrated.referenceImage || null,
     layerSettings: cloneLayers(migrated.layerSettings),
@@ -157,6 +169,26 @@ export function normaliseProject(input, { validateReferences = true } = {}) {
     assertArray(migrated[collection] ?? [], collection);
     project[collection] = migrated[collection] ?? [];
   }
+  project.walls = project.walls.map((wall) => ({
+    renovationStatus: "existing",
+    ...wall,
+  }));
+  project.openings = project.openings.map((opening) => ({
+    renovationStatus: "existing",
+    ...opening,
+  }));
+  project.objects = project.objects.map((object) => ({
+    renovationStatus: "proposed",
+    ...object,
+  }));
+  project.electricalRoutes = project.electricalRoutes.map((route) => ({
+    renovationStatus: "proposed",
+    ...route,
+  }));
+  project.plumbingRoutes = project.plumbingRoutes.map((route) => ({
+    renovationStatus: "proposed",
+    ...route,
+  }));
   assertUniqueIds(project);
   if (validateReferences) assertReferences(project);
   return project;

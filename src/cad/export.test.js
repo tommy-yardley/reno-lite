@@ -5,6 +5,7 @@ import { createEmptyProject } from "./project.js";
 import { buildRenderModel } from "./renderModel.js";
 
 const project = createEmptyProject({
+  renovationView: "proposed",
   nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 120, y: 0 }],
   walls: [{ id: 3, startNodeId: 1, endNodeId: 2, thicknessInches: 4.5, locked: true }],
   rooms: [],
@@ -50,14 +51,14 @@ test("hidden layers are omitted from clean SVG and DXF exports", () => {
 });
 
 test("electrical wiring routes survive project and discipline exports", () => {
-  const wired = { ...project, objects: [{ id: 5, kind: "ceilingLight", name: "Light", category: "Lighting", mount: "free", x: 20, y: 20 }, { id: 6, kind: "lightSwitch", name: "Switch", category: "Electrical", mount: "free", x: 80, y: 50 }], electricalCircuits: [{ id: 7, name: "Lighting", colour: "#ff0000" }], electricalRoutes: [{ id: 8, fromObjectId: 5, toObjectId: 6, circuitId: 7 }] };
+  const wired = createEmptyProject({ ...project, objects: [{ id: 5, kind: "ceilingLight", name: "Light", category: "Lighting", mount: "free", x: 20, y: 20 }, { id: 6, kind: "lightSwitch", name: "Switch", category: "Electrical", mount: "free", x: 80, y: 50 }], electricalCircuits: [{ id: 7, name: "Lighting", colour: "#ff0000" }], electricalRoutes: [{ id: 8, fromObjectId: 5, toObjectId: 6, circuitId: 7 }] });
   assert.match(buildCadSvg(wired), /#ff0000/);
   assert.match(buildCadDxf(wired), /ELECTRICAL_WIRING/);
   assert.deepEqual(parseProject(serializeProject(wired)), wired);
 });
 
 test("plumbing services preserve system and diameter in project exports", () => {
-  const piped = { ...project, objects: [{ id: 5, kind: "basin", name: "Basin", category: "Plumbing", mount: "free", x: 20, y: 20 }, { id: 6, kind: "stopcock", name: "Stopcock", category: "Plumbing", mount: "free", x: 80, y: 50 }], plumbingRoutes: [{ id: 7, fromObjectId: 5, toObjectId: 6, system: "cold", diameterMm: 15 }] };
+  const piped = createEmptyProject({ ...project, objects: [{ id: 5, kind: "basin", name: "Basin", category: "Plumbing", mount: "free", x: 20, y: 20 }, { id: 6, kind: "stopcock", name: "Stopcock", category: "Plumbing", mount: "free", x: 80, y: 50 }], plumbingRoutes: [{ id: 7, fromObjectId: 5, toObjectId: 6, system: "cold", diameterMm: 15 }] });
   assert.match(buildCadSvg(piped), /#2E86C1/i);
   assert.match(buildCadDxf(piped), /PLUMBING_COLD/);
   assert.deepEqual(parseProject(serializeProject(piped)), piped);
