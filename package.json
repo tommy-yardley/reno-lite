@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test src/cad/*.test.js",
+    "test": "node --test src/architecture.test.js src/cad/*.test.js",
+    "check": "npm test && npm run build",
     "preview": "vite preview",
     "cap:sync": "npm run build && npx cap sync",
     "cap:ios": "npm run cap:sync && npx cap open ios",
