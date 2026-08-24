@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, validateDesignLayout, wallKey } from "./geometry";
+import { distance, nodeIsConstrained, polygonArea, projectToSegment, segmentIntersection, snapAngle, snapDegrees, validateCadGraph, validateDesignLayout, wallKey } from "./geometry";
 import { OBJECT_CATALOG } from "./catalog";
 import { compressImageForStorage } from "../lib/imageCompression";
 import { validateElectrical } from "./electrical";
@@ -13,6 +13,7 @@ import {
   normaliseProject,
   PROJECT_STORAGE_KEY,
 } from "./project";
+import { reconcileProjectFaces } from "./faces";
 
 export const WORKSPACE = { width: 720, height: 480 };
 const DEFAULT_WALL_THICKNESS_IN = 4.5;
@@ -20,7 +21,11 @@ const DEFAULT_WALL_THICKNESS_IN = 4.5;
 function initialState() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(PROJECT_STORAGE_KEY));
-    if (saved) return normaliseProject(saved);
+    if (saved) {
+      const project = normaliseProject(saved, { validateReferences: false });
+      let id = nextProjectId(project);
+      return reconcileProjectFaces(project, () => id++);
+    }
   } catch {
     // Start with an empty drawing when storage is unavailable or invalid.
   }
@@ -131,9 +136,15 @@ export function useCadState() {
     redoStack.current = [];
   }, [snapshot]);
   const runCommand = useCallback(
-    (command) => {
+    (command, { reconcileFaces = false } = {}) => {
       const before = snapshot();
-      const after = applyProjectCommand(before, command);
+      let after = applyProjectCommand(before, command);
+      if (reconcileFaces) {
+        after = reconcileProjectFaces(
+          { ...after, rooms: before.rooms },
+          () => nextId.current++,
+        );
+      }
       if (after === before) return false;
       pushHistory();
       applyProject(after);
@@ -409,18 +420,28 @@ export function useCadState() {
       targetNode.id === chainNodeIds[0] &&
       activeNodeId !== targetNode.id;
     if (closingRoom) {
-      nextRooms.push({ id: nextId.current++, name: `Room ${nextRooms.length + 1}`, type: "Room", classification: "room", nodeIds: [...chainNodeIds, ...junctions.map((junction) => junction.id)], wallIds: [...chainWallIds, ...addedWallIds], color: "#B9D8C2" });
       finishWallChain();
     } else {
       setActiveNodeId(targetNode.id);
       setChainNodeIds((ids) => (ids.length ? [...ids, ...junctions.map((junction) => junction.id), targetNode.id] : [targetNode.id]));
       if (addedWallIds.length) setChainWallIds((ids) => [...ids, ...addedWallIds]);
     }
-    setNodes(nextNodes);
-    setWalls(nextWalls);
-    setRooms(nextRooms);
+    const reconciled = reconcileProjectFaces(
+      {
+        ...project,
+        nodes: nextNodes,
+        walls: nextWalls,
+        rooms: nextRooms,
+        openings: nextOpenings,
+        objects: nextObjects,
+      },
+      () => nextId.current++,
+    );
+    setNodes(reconciled.nodes);
+    setWalls(reconciled.walls);
+    setRooms(reconciled.rooms);
     setOpenings(nextOpenings);
-    setObjects(nextObjects);
+    setObjects(reconciled.objects);
   };
 
   const addWallAtLength = (inches) => {
@@ -701,6 +722,29 @@ export function useCadState() {
     );
   };
 
+  const setWallAngle = (wallId, degrees) => {
+    if (!Number.isFinite(degrees)) return;
+    const wall = walls.find((item) => item.id === wallId);
+    if (!wall || wall.locked) return;
+    const start = nodeMap.get(wall.startNodeId);
+    const end = nodeMap.get(wall.endNodeId);
+    if (!start || !end) return;
+    const length = distance(start, end);
+    const radians = (snapDegrees(degrees) * Math.PI) / 180;
+    const vector = { x: Math.cos(radians) * length, y: Math.sin(radians) * length };
+    const canMoveEnd = !nodeIsConstrained(end.id, walls, wall.id);
+    const canMoveStart = !nodeIsConstrained(start.id, walls, wall.id);
+    if (canMoveEnd) {
+      runCommand(
+        projectCommands.patch("node", [end.id], { x: start.x + vector.x, y: start.y + vector.y }, "Set wall angle"),
+      );
+    } else if (canMoveStart) {
+      runCommand(
+        projectCommands.patch("node", [start.id], { x: end.x - vector.x, y: end.y - vector.y }, "Set wall angle"),
+      );
+    }
+  };
+
   const setWallThickness = (wallId, inches) => {
     if (!Number.isFinite(inches) || inches <= 0) return;
     runCommand(projectCommands.patch("wall", [wallId], { thicknessInches: inches }, "Set wall thickness"));
@@ -708,7 +752,10 @@ export function useCadState() {
 
   const deleteSelectedWall = () => {
     if (!selectedWall) return;
-    runCommand(projectCommands.remove("wall", [selectedWall.id], "Delete wall"));
+    runCommand(
+      projectCommands.remove("wall", [selectedWall.id], "Delete wall"),
+      { reconcileFaces: true },
+    );
     setSelectedWallId(null);
   };
 
@@ -716,8 +763,15 @@ export function useCadState() {
     runCommand(projectCommands.patch("room", [roomId], updates, "Edit room"));
   };
 
-  const deleteRoom = (roomId) => {
-    runCommand(projectCommands.remove("room", [roomId], "Delete room"));
+  const resetRoom = (roomId) => {
+    const index = rooms.findIndex((room) => room.id === roomId);
+    runCommand(projectCommands.patch("room", [roomId], {
+      name: `Room ${index + 1}`,
+      type: "Room",
+      classification: "room",
+      hostRoomId: null,
+      color: "#B9D8C2",
+    }, "Reset room"));
     setSelectedRoomId(null);
   };
 
@@ -859,7 +913,9 @@ export function useCadState() {
   };
 
   const loadProject = (project) => {
-    const nextProject = normaliseProject(project);
+    const imported = normaliseProject(project);
+    let importedNextId = nextProjectId(imported);
+    const nextProject = reconcileProjectFaces(imported, () => importedNextId++);
     pushHistory();
     applyProject(nextProject);
     nextId.current = nextProjectId(nextProject);
@@ -990,10 +1046,11 @@ export function useCadState() {
     onRoomPointerDown,
     toggleWallLock,
     setWallLength,
+    setWallAngle,
     setWallThickness,
     deleteSelectedWall,
     updateRoom,
-    deleteRoom,
+    resetRoom,
     updateOpening,
     updateOpenings,
     duplicateOpenings,

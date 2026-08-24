@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Lock, LockOpen, MousePointer2, Pencil, Trash2 } from "lucide-react";
-import { distance } from "./geometry";
+import { distance, wallAngleDegrees } from "./geometry";
 import { parseLengthInput } from "../lib/units";
 import ObjectPanel from "./ObjectPanel";
 import ExportPanel from "./ExportPanel";
@@ -14,6 +14,7 @@ export default function CadSidebar({ cad }) {
   const [lengthInput, setLengthInput] = useState("");
   const [nextLengthInput, setNextLengthInput] = useState("");
   const [thicknessInput, setThicknessInput] = useState("");
+  const [angleInput, setAngleInput] = useState("");
   const [openingWidthInput, setOpeningWidthInput] = useState("");
   const { selectedWall, nodeMap, unit } = cad;
   const start = selectedWall && nodeMap.get(selectedWall.startNodeId);
@@ -23,10 +24,12 @@ export default function CadSidebar({ cad }) {
     if (!selectedWall || !start || !end) {
       setLengthInput("");
       setThicknessInput("");
+      setAngleInput("");
       return;
     }
     setLengthInput(unit === "metric" ? (distance(start, end) / 39.3700787).toFixed(3) : (distance(start, end) / 12).toFixed(3));
     setThicknessInput(unit === "metric" ? (selectedWall.thicknessInches * 25.4).toFixed(0) : selectedWall.thicknessInches.toFixed(1));
+    setAngleInput(wallAngleDegrees(start, end).toFixed(0));
   }, [selectedWall?.id, selectedWall?.thicknessInches, start?.x, start?.y, end?.x, end?.y, unit]);
 
   useEffect(() => {
@@ -179,7 +182,7 @@ export default function CadSidebar({ cad }) {
               <div key={room.id} onClick={() => cad.setSelectedRoomId(room.id)} className="rounded-lg border bg-[#FBF8F1] p-2.5" style={{ borderColor: cad.selectedRoomId === room.id ? "#2F78C4" : "#D8CCB0" }}>
                 <div className="flex items-center gap-2">
                   <input value={room.name} onChange={(event) => cad.updateRoom(room.id, { name: event.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-medium" />
-                  <button onClick={() => cad.deleteRoom(room.id)} className="text-[#B2483A]"><Trash2 size={13} /></button>
+                  <button onClick={() => cad.resetRoom(room.id)} title="Reset room metadata" className="rounded px-1 py-0.5 text-[10px] text-[#8A97A3]">Reset</button>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <select value={room.type} disabled={room.classification === "void"} onChange={(event) => cad.updateRoom(room.id, { type: event.target.value })} className="rounded border border-[#D8CCB0] bg-transparent px-1 py-0.5 text-[10px] text-[#5B6B78] disabled:opacity-40">
@@ -223,6 +226,24 @@ export default function CadSidebar({ cad }) {
                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                 className="mono w-full rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-sm disabled:opacity-50"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-[#5B6B78]">Angle (snaps to 15°)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="345"
+                  step="15"
+                  value={angleInput}
+                  disabled={selectedWall.locked}
+                  onChange={(event) => setAngleInput(event.target.value)}
+                  onBlur={() => cad.setWallAngle(selectedWall.id, Number(angleInput))}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                  className="mono min-w-0 flex-1 rounded border border-[#D8CCB0] bg-transparent px-2 py-1.5 text-sm disabled:opacity-50"
+                />
+                <span className="mono text-xs text-[#8A97A3]">°</span>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-[11px] text-[#5B6B78]">Thickness ({unit === "metric" ? "mm" : "in"})</label>
