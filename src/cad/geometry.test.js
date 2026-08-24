@@ -1,12 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nodeIsConstrained, objectFootprint, openingSpan, pointInPolygon, polygonArea, polygonsIntersect, projectToSegment, segmentIntersection, snapAngle, validateCadGraph, validateDesignLayout, wallKey } from "./geometry.js";
+import { nodeIsConstrained, objectFootprint, openingSpan, pointInPolygon, polygonArea, polygonsIntersect, projectToSegment, segmentIntersection, snapAngle, snapDegrees, validateCadGraph, validateDesignLayout, wallAngleDegrees, wallKey } from "./geometry.js";
 
 test("snapAngle snaps to 15 degree increments while preserving length", () => {
   const point = snapAngle({ x: 0, y: 0 }, { x: 10, y: 4 });
   const angle = (Math.atan2(point.y, point.x) * 180) / Math.PI;
   assert.ok(Math.abs(angle - 15) < 1e-9);
   assert.ok(Math.abs(Math.hypot(point.x, point.y) - Math.hypot(10, 4)) < 1e-9);
+});
+
+test("wall angles normalise and snap to exact 15 degree bearings", () => {
+  assert.equal(wallAngleDegrees({ x: 0, y: 0 }, { x: 0, y: -10 }), 270);
+  assert.equal(snapDegrees(82), 75);
+  assert.equal(snapDegrees(-2), 0);
 });
 
 test("projectToSegment clamps projections to wall endpoints", () => {

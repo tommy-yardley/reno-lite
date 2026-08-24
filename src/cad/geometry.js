@@ -18,6 +18,15 @@ export function snapAngle(anchor, point, stepDegrees = ANGLE_SNAP_DEGREES) {
   };
 }
 
+export function wallAngleDegrees(start, end) {
+  return ((Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI + 360) % 360;
+}
+
+export function snapDegrees(degrees, stepDegrees = ANGLE_SNAP_DEGREES) {
+  const normalised = ((degrees % 360) + 360) % 360;
+  return (Math.round(normalised / stepDegrees) * stepDegrees) % 360;
+}
+
 export function projectToSegment(point, start, end) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
