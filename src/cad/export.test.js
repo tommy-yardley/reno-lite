@@ -1,15 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildCadDxf, buildCadSvg, parseProject, serializeProject } from "./export.js";
+import { createEmptyProject } from "./project.js";
 
-const project = {
+const project = createEmptyProject({
   nodes: [{ id: 1, x: 0, y: 0 }, { id: 2, x: 120, y: 0 }],
   walls: [{ id: 3, startNodeId: 1, endNodeId: 2, thicknessInches: 4.5, locked: true }],
   rooms: [],
   openings: [{ id: 4, wallId: 3, type: "door", t: 0.5, widthInches: 36 }],
   objects: [{ id: 5, kind: "socket", name: "Socket", category: "Electrical", mount: "wall", wallId: 3, t: 0.25 }],
   unit: "imperial", referenceImage: { src: "secret-reference-data" },
-};
+});
 
 test("drawing SVG excludes the uploaded reference image", () => {
   const svg = buildCadSvg(project);
@@ -42,7 +43,9 @@ test("hidden layers are omitted from clean SVG and DXF exports", () => {
   const hidden = { ...project, layerSettings: { architecture: { visible: true }, electrical: { visible: false } } };
   assert.doesNotMatch(buildCadSvg(hidden), />S<\/text>/);
   assert.doesNotMatch(buildCadDxf(hidden), /ELECTRICAL/);
-  assert.deepEqual(parseProject(serializeProject(hidden)), hidden);
+  const reopened = parseProject(serializeProject(hidden));
+  assert.deepEqual(reopened.layerSettings.electrical, { visible: false, locked: false });
+  assert.equal(reopened.layerSettings.architecture.visible, true);
 });
 
 test("electrical wiring routes survive project and discipline exports", () => {

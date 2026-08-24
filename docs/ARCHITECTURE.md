@@ -37,8 +37,8 @@ Persisted projects require:
 - validation before replacing the open project;
 - deterministic serialisation suitable for fixtures and regression tests.
 
-All geometry is stored in real-world metres. Unit preferences affect display and
-input only.
+All geometry is stored in one canonical physical unit (currently inches). Metric is
+the product default; unit preferences affect display and input only.
 
 ## Verification
 
