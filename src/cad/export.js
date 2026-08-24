@@ -20,14 +20,14 @@ export function buildCadSvg(project) {
     .join("");
   const wallMarkup = model.walls
     .map(
-      ({ source: wall, start, end }) =>
-        `<line data-entity="wall" data-id="${wall.id}" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="#17242f" stroke-width="${wall.thicknessInches}" stroke-linecap="square"/>`,
+      ({ source: wall, start, end, appearance }) =>
+        `<line data-entity="wall" data-id="${wall.id}" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${appearance.colour || "#17242f"}" stroke-width="${wall.thicknessInches}" stroke-linecap="square" opacity="${appearance.opacity}" ${appearance.dash ? `stroke-dasharray="${appearance.dash}"` : ""}/>`,
     )
     .join("");
   const openingMarkup = model.openings
-    .map(({ source: opening, wall, span }) => {
-      const color = opening.type === "door" ? "#b8863e" : "#5e86a8";
-      return `<g data-entity="${opening.type}" data-id="${opening.id}"><line x1="${span.start.x}" y1="${span.start.y}" x2="${span.end.x}" y2="${span.end.y}" stroke="#fff" stroke-width="${Math.max(8, wall.source.thicknessInches + 3)}"/><line x1="${span.start.x}" y1="${span.start.y}" x2="${span.end.x}" y2="${span.end.y}" stroke="${color}" stroke-width="2"/></g>`;
+    .map(({ source: opening, wall, span, appearance }) => {
+      const color = appearance.colour || (opening.type === "door" ? "#b8863e" : "#5e86a8");
+      return `<g data-entity="${opening.type}" data-id="${opening.id}" opacity="${appearance.opacity}"><line x1="${span.start.x}" y1="${span.start.y}" x2="${span.end.x}" y2="${span.end.y}" stroke="#fff" stroke-width="${Math.max(8, wall.source.thicknessInches + 3)}"/><line x1="${span.start.x}" y1="${span.start.y}" x2="${span.end.x}" y2="${span.end.y}" stroke="${color}" stroke-width="2" ${appearance.dash ? `stroke-dasharray="${appearance.dash}"` : ""}/></g>`;
     })
     .join("");
   const objectMarkup = model.objects

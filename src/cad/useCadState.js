@@ -44,6 +44,7 @@ export function useCadState() {
   const [plumbingRoutes, setPlumbingRoutes] = useState(initial.plumbingRoutes || []);
   const [shoppingItems, setShoppingItems] = useState(initial.shoppingItems || []);
   const [projectName, setProjectName] = useState(initial.name);
+  const [renovationView, setRenovationView] = useState(initial.renovationView);
   const [unit, setUnit] = useState(initial.unit);
   const [referenceImage, setReferenceImage] = useState(initial.referenceImage);
   const [layerSettings, setLayerSettings] = useState({ ...DEFAULT_LAYERS, ...(initial.layerSettings || {}) });
@@ -99,6 +100,7 @@ export function useCadState() {
     () =>
       createEmptyProject({
         name: projectName,
+        renovationView,
         nodes,
         walls,
         rooms,
@@ -112,11 +114,12 @@ export function useCadState() {
         referenceImage,
         layerSettings,
       }),
-    [projectName, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings],
+    [projectName, renovationView, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings],
   );
   const snapshot = useCallback(() => project, [project]);
   const applyProject = useCallback((next) => {
     setProjectName(next.name);
+    setRenovationView(next.renovationView);
     setNodes(next.nodes);
     setWalls(next.walls);
     setRooms(next.rooms);
@@ -314,6 +317,7 @@ export function useCadState() {
       widthInches: preset.widthInches || 18,
       depthInches: preset.depthInches || 18,
       rotation: 0,
+      renovationStatus: renovationView === "existing" ? "existing" : "proposed",
     };
     pushHistory();
     setObjects((items) => [...items, object]);
@@ -410,7 +414,7 @@ export function useCadState() {
       if (duplicate) addedWallIds.push(duplicate.id);
       else {
         const wallId = nextId.current++;
-        nextWalls.push({ id: wallId, startNodeId, endNodeId, thicknessInches: DEFAULT_WALL_THICKNESS_IN, locked: false });
+        nextWalls.push({ id: wallId, startNodeId, endNodeId, thicknessInches: DEFAULT_WALL_THICKNESS_IN, locked: false, renovationStatus: renovationView === "existing" ? "existing" : "proposed" });
         addedWallIds.push(wallId);
       }
     }
@@ -469,6 +473,7 @@ export function useCadState() {
       swing: 1,
       hingeSide: "start",
       variant: type === "door" ? "standard" : "casement",
+      renovationStatus: renovationView === "existing" ? "existing" : "proposed",
     };
     setOpenings((items) => [...items, opening]);
     setSelectedOpeningId(opening.id);
@@ -696,6 +701,10 @@ export function useCadState() {
     if (wall) runCommand(projectCommands.patch("wall", [wallId], { locked: !wall.locked }, "Lock wall"));
   };
 
+  const updateWall = (wallId, updates) => {
+    runCommand(projectCommands.patch("wall", [wallId], updates, "Edit wall"));
+  };
+
   const setWallLength = (wallId, inches) => {
     if (!Number.isFinite(inches) || inches <= 0) return;
     const wall = walls.find((item) => item.id === wallId);
@@ -872,7 +881,7 @@ export function useCadState() {
 
   const addElectricalRoute = (fromObjectId, toObjectId, circuitId) => {
     if (!fromObjectId || !toObjectId || fromObjectId === toObjectId) return;
-    runCommand(projectCommands.append("electricalRoute", { id: nextId.current++, fromObjectId, toObjectId, circuitId: circuitId || null, via: [] }, "Add wiring route"));
+    runCommand(projectCommands.append("electricalRoute", { id: nextId.current++, fromObjectId, toObjectId, circuitId: circuitId || null, via: [], renovationStatus: "proposed" }, "Add wiring route"));
   };
 
   const deleteElectricalRoute = (routeId) => {
@@ -881,7 +890,7 @@ export function useCadState() {
 
   const addPlumbingRoute = (fromObjectId, toObjectId, system = "cold", diameterMm = 15) => {
     if (!fromObjectId || !toObjectId || fromObjectId === toObjectId) return;
-    runCommand(projectCommands.append("plumbingRoute", { id: nextId.current++, fromObjectId, toObjectId, system, diameterMm, via: [] }, "Add plumbing route"));
+    runCommand(projectCommands.append("plumbingRoute", { id: nextId.current++, fromObjectId, toObjectId, system, diameterMm, via: [], renovationStatus: "proposed" }, "Add plumbing route"));
   };
 
   const updatePlumbingRoute = (routeId, updates) => {
@@ -969,6 +978,8 @@ export function useCadState() {
     project,
     projectName,
     setProjectName,
+    renovationView,
+    setRenovationView,
     svgRef,
     fileInputRef,
     nodes,
@@ -1045,6 +1056,7 @@ export function useCadState() {
     onObjectPointerDown,
     onRoomPointerDown,
     toggleWallLock,
+    updateWall,
     setWallLength,
     setWallAngle,
     setWallThickness,

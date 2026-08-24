@@ -2,6 +2,7 @@ import { OBJECT_CATALOG } from "./catalog.js";
 import { electricalRoutePoints } from "./electrical.js";
 import { openingSpan, polygonArea } from "./geometry.js";
 import { PIPE_SYSTEMS, plumbingRoutePoints } from "./plumbing.js";
+import { renovationAppearance, visibleInRenovationView } from "./renovation.js";
 
 export const layerForObject = (object) =>
   object.category === "Electrical" || object.category === "Lighting"
@@ -39,6 +40,7 @@ function drawingBounds(project) {
 export function buildRenderModel(project, { respectVisibility = true } = {}) {
   const nodeMap = new Map(project.nodes.map((node) => [node.id, node]));
   const visible = (layer) => !respectVisibility || isVisible(project, layer);
+  const renovationView = project.renovationView || "existing";
   const resolvedWalls = project.walls.flatMap((wall) => {
         const start = nodeMap.get(wall.startNodeId);
         const end = nodeMap.get(wall.endNodeId);
@@ -50,10 +52,14 @@ export function buildRenderModel(project, { respectVisibility = true } = {}) {
           end,
           midpoint: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
           length: Math.hypot(end.x - start.x, end.y - start.y),
+          appearance: renovationAppearance(wall, renovationView),
         }];
       });
-  const walls = visible("architecture") ? resolvedWalls : [];
-  const wallMap = new Map(resolvedWalls.map((wall) => [wall.id, wall]));
+  const phaseWalls = resolvedWalls.filter(({ source }) =>
+    visibleInRenovationView(source, renovationView),
+  );
+  const walls = visible("architecture") ? phaseWalls : [];
+  const wallMap = new Map(phaseWalls.map((wall) => [wall.id, wall]));
   const rooms = visible("architecture")
     ? project.rooms.flatMap((room) => {
         const points = room.nodeIds.map((id) => nodeMap.get(id)).filter(Boolean);
@@ -88,7 +94,7 @@ export function buildRenderModel(project, { respectVisibility = true } = {}) {
       })
     : [];
   const openings = visible("architecture")
-    ? project.openings.flatMap((opening) => {
+    ? project.openings.filter((opening) => visibleInRenovationView(opening, renovationView)).flatMap((opening) => {
         const wall = wallMap.get(opening.wallId);
         if (!wall) return [];
         return [{
@@ -96,12 +102,13 @@ export function buildRenderModel(project, { respectVisibility = true } = {}) {
           source: opening,
           wall,
           span: openingSpan(wall.start, wall.end, opening.t, opening.widthInches),
+          appearance: renovationAppearance(opening, renovationView),
         }];
       })
     : [];
   const objects = project.objects.flatMap((object) => {
     const layer = layerForObject(object);
-    if (!visible(layer)) return [];
+    if (!visible(layer) || !visibleInRenovationView(object, renovationView, "proposed")) return [];
     let x = object.x;
     let y = object.y;
     let rotation = object.rotation || 0;
@@ -113,10 +120,10 @@ export function buildRenderModel(project, { respectVisibility = true } = {}) {
       rotation = (Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x) * 180) / Math.PI;
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
-    return [{ id: object.id, source: object, layer, preset: OBJECT_CATALOG[object.kind] || {}, x, y, rotation }];
+    return [{ id: object.id, source: object, layer, preset: OBJECT_CATALOG[object.kind] || {}, x, y, rotation, appearance: renovationAppearance(object, renovationView, "proposed") }];
   });
   const electricalRoutes = visible("electrical")
-    ? (project.electricalRoutes || []).flatMap((route) => {
+    ? (project.electricalRoutes || []).filter((route) => visibleInRenovationView(route, renovationView, "proposed")).flatMap((route) => {
         const points = electricalRoutePoints(route, project.objects, project.walls, nodeMap);
         if (points.length < 2) return [];
         return [{
@@ -124,14 +131,15 @@ export function buildRenderModel(project, { respectVisibility = true } = {}) {
           source: route,
           points,
           circuit: (project.electricalCircuits || []).find((item) => item.id === route.circuitId),
+          appearance: renovationAppearance(route, renovationView, "proposed"),
         }];
       })
     : [];
   const plumbingRoutes = visible("plumbing")
-    ? (project.plumbingRoutes || []).flatMap((route) => {
+    ? (project.plumbingRoutes || []).filter((route) => visibleInRenovationView(route, renovationView, "proposed")).flatMap((route) => {
         const points = plumbingRoutePoints(route, project.objects, project.walls, nodeMap);
         if (points.length < 2) return [];
-        return [{ id: route.id, source: route, points, system: PIPE_SYSTEMS[route.system] || PIPE_SYSTEMS.cold }];
+        return [{ id: route.id, source: route, points, system: PIPE_SYSTEMS[route.system] || PIPE_SYSTEMS.cold, appearance: renovationAppearance(route, renovationView, "proposed") }];
       })
     : [];
 
