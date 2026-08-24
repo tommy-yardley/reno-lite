@@ -58,7 +58,7 @@ export default function ExportPanel({ cad }) {
 
   const exportSvg = () => saveOrShareFile(new Blob([buildCadSvg(project)], { type: "image/svg+xml" }), "reno-lite-plan.svg");
   const exportDxf = () => saveOrShareFile(new Blob([buildCadDxf(project)], { type: "application/dxf" }), "reno-lite-plan.dxf");
-  const exportProject = () => saveOrShareFile(new Blob([serializeProject(project)], { type: "application/json" }), "reno-lite-project.json");
+  const exportProject = () => saveOrShareFile(new Blob([serializeProject(project)], { type: "application/json" }), "reno-lite-project.renolite");
   const exportScheduleCsv = () => saveOrShareFile(new Blob([buildContractorScheduleCsv(project)], { type: "text/csv" }), "reno-lite-contractor-schedules.csv");
   const exportSchedulePdf = async () => {
     const canvas = await svgToCanvas(buildContractorScheduleSvg(project), 2);
@@ -134,7 +134,7 @@ export default function ExportPanel({ cad }) {
           <button disabled={busy != null} onClick={() => run("schedule-pdf", exportSchedulePdf)} className="flex items-center justify-center gap-1 rounded border border-[#D8CCB0] py-1.5 text-[10px] text-[#5E86A8] disabled:opacity-40"><Download size={11} /> Schedule PDF</button>
         </div>
       </div>
-      <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importProject} />
+      <input ref={importRef} type="file" accept="application/json,.renolite,.json" className="hidden" onChange={importProject} />
       <button onClick={() => importRef.current?.click()} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-[#D8CCB0] py-1.5 text-xs text-[#5E86A8]"><Upload size={12} /> Open project file</button>
       <button onClick={() => { if (window.confirm("Start a new project? The current drawing can still be restored with Undo until this page is closed.")) cad.clearProject(); }} className="mt-2 w-full rounded border border-[#B2483A] py-1.5 text-xs text-[#B2483A]">Start new project</button>
       <p className="mt-2 text-[10px] leading-4 text-[#8A97A3]">Drawing exports never include the reference image. Project files retain it so editing can continue on another device.</p>

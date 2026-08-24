@@ -8,3 +8,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>
 );
+
+if (new URLSearchParams(window.location.search).has("browser-test")) {
+  import("./browserTest.js").then(({ runBrowserTest }) => runBrowserTest());
+}

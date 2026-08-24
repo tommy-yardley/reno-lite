@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { Image, Redo2, Ruler, Undo2, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { FolderOpen, Image, Redo2, Ruler, Undo2, X } from "lucide-react";
 import CadCanvas from "./cad/CadCanvas";
 import CadSidebar from "./cad/CadSidebar";
 import ReferencePanel from "./cad/ReferencePanel";
 import { useCadState } from "./cad/useCadState";
 import { RENOVATION_VIEWS } from "./cad/renovation";
+import ProjectLibrary from "./cad/ProjectLibrary";
 
 const SAVE_LABEL = {
   idle: "measured CAD workspace",
@@ -16,6 +17,18 @@ const SAVE_LABEL = {
 export default function App() {
   const cad = useCadState();
   const [referenceOpen, setReferenceOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const referenceCloseRef = useRef(null);
+
+  useEffect(() => {
+    if (!referenceOpen) return undefined;
+    referenceCloseRef.current?.focus();
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setReferenceOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [referenceOpen]);
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-[linear-gradient(180deg,#F3EEE3_0%,#ECE4D2_100%)] text-[#1B2B3A]" style={{ fontFamily: "'IBM Plex Sans', ui-sans-serif, system-ui" }}>
@@ -38,6 +51,7 @@ export default function App() {
         <select aria-label="Renovation view" value={cad.renovationView} onChange={(event) => cad.setRenovationView(event.target.value)} className="rounded border border-[#D8CCB0] bg-[#FBF8F1] px-1.5 py-2 text-[10px] text-[#5B6B78] md:hidden">
           {Object.entries(RENOVATION_VIEWS).map(([value, details]) => <option key={value} value={value}>{details.label}</option>)}
         </select>
+        <button onClick={() => setLibraryOpen(true)} title="Open project library" aria-label="Open project library" className="rounded border border-[#D8CCB0] p-2 text-[#5E86A8]"><FolderOpen size={16} /></button>
         <button onClick={() => setReferenceOpen(true)} title="Open reference plan" className="flex items-center gap-1.5 rounded border border-[#D8CCB0] p-2 text-[#5E86A8] sm:px-3"><Image size={16} /><span className="hidden text-xs sm:inline">Reference</span></button>
         <button onClick={cad.undo} disabled={!cad.canUndo} title="Undo" className="rounded border border-[#D8CCB0] p-2 text-[#5E86A8] disabled:opacity-30"><Undo2 size={16} /></button>
         <button onClick={cad.redo} disabled={!cad.canRedo} title="Redo" className="rounded border border-[#D8CCB0] p-2 text-[#5E86A8] disabled:opacity-30"><Redo2 size={16} /></button>
@@ -51,11 +65,12 @@ export default function App() {
       {referenceOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-[#1B2B3A]/35 p-2 backdrop-blur-[2px] sm:p-4" role="dialog" aria-modal="true" aria-label="Reference plan">
           <div className="flex h-full w-full max-w-md min-w-0 flex-col gap-2">
-            <button onClick={() => setReferenceOpen(false)} className="ml-auto flex items-center gap-1.5 rounded-md bg-[#1B2B3A] px-3 py-2 text-xs text-[#FBF8F1]"><X size={15} /> Close</button>
+            <button ref={referenceCloseRef} onClick={() => setReferenceOpen(false)} className="ml-auto flex items-center gap-1.5 rounded-md bg-[#1B2B3A] px-3 py-2 text-xs text-[#FBF8F1]"><X size={15} /> Close</button>
             <div className="min-h-0 flex-1"><ReferencePanel cad={cad} /></div>
           </div>
         </div>
       )}
+      {libraryOpen && <ProjectLibrary cad={cad} onClose={() => setLibraryOpen(false)} />}
     </div>
   );
 }

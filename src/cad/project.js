@@ -35,6 +35,7 @@ export function createEmptyProject(overrides = {}) {
   const project = {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
+    projectId: null,
     name: "Untitled renovation",
     renovationView: "existing",
     nodes: [],
@@ -156,6 +157,7 @@ export function normaliseProject(input, { validateReferences = true } = {}) {
   }
   const migrated = migrateProject(input);
   const project = createEmptyProject({
+    projectId: typeof migrated.projectId === "string" ? migrated.projectId : null,
     name: typeof migrated.name === "string" && migrated.name.trim() ? migrated.name.trim() : "Untitled renovation",
     renovationView: ["existing", "proposed", "changes"].includes(migrated.renovationView)
       ? migrated.renovationView

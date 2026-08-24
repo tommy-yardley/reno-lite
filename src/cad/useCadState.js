@@ -44,6 +44,7 @@ export function useCadState() {
   const [plumbingRoutes, setPlumbingRoutes] = useState(initial.plumbingRoutes || []);
   const [shoppingItems, setShoppingItems] = useState(initial.shoppingItems || []);
   const [projectName, setProjectName] = useState(initial.name);
+  const [projectId, setProjectId] = useState(initial.projectId);
   const [renovationView, setRenovationView] = useState(initial.renovationView);
   const [unit, setUnit] = useState(initial.unit);
   const [referenceImage, setReferenceImage] = useState(initial.referenceImage);
@@ -100,6 +101,7 @@ export function useCadState() {
     () =>
       createEmptyProject({
         name: projectName,
+        projectId,
         renovationView,
         nodes,
         walls,
@@ -114,11 +116,12 @@ export function useCadState() {
         referenceImage,
         layerSettings,
       }),
-    [projectName, renovationView, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings],
+    [projectName, projectId, renovationView, nodes, walls, rooms, openings, objects, electricalCircuits, electricalRoutes, plumbingRoutes, shoppingItems, unit, referenceImage, layerSettings],
   );
   const snapshot = useCallback(() => project, [project]);
   const applyProject = useCallback((next) => {
     setProjectName(next.name);
+    setProjectId(next.projectId);
     setRenovationView(next.renovationView);
     setNodes(next.nodes);
     setWalls(next.walls);
@@ -979,6 +982,8 @@ export function useCadState() {
     project,
     projectName,
     setProjectName,
+    projectId,
+    setProjectId,
     renovationView,
     setRenovationView,
     svgRef,

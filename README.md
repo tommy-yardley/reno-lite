@@ -56,11 +56,13 @@ and reusable platform/export helpers live in `src/lib/`. See
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for dependency rules and
 [docs/PRODUCT_SCOPE.md](./docs/PRODUCT_SCOPE.md) for product decisions.
 
-Projects currently autosave to the current browser/device. Editable `.renolite`
-files are the portable interchange format until a project library is introduced.
+Projects autosave to the current browser/device and can be kept as named entries in
+the local project library. Editable `.renolite` files remain the portable backup
+and transfer format.
 
 ## Continuous integration
 
-Every pull request runs the Node test suite and production build. The Android
+Every pull request runs the Node suite, a real headless-browser interaction and
+accessibility smoke test, and the production build. The Android
 workflow builds an installable debug APK on demand and for version tags; tagged
 builds are attached to a GitHub release.
