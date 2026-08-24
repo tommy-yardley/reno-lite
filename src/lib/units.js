@@ -1,5 +1,4 @@
-import { INCH_PER_METER } from "../constants";
-export { INCH_PER_METER };
+export const INCH_PER_METER = 39.3700787;
 
 function gcdInt(a, b) {
   return b ? gcdInt(b, a % b) : a;
