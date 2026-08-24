@@ -20,4 +20,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-
+      - name: Browser interaction and accessibility smoke tests
+        run: npm run test:browser
+        env:
+          BROWSER_TEST_REQUIRED: "1"
